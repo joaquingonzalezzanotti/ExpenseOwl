@@ -248,34 +248,7 @@ var defaultCategories = []string{
 }
 
 var SupportedCurrencies = []string{
-	"usd", // US Dollar
-	"eur", // Euro
-	"gbp", // British Pound
-	"jpy", // Japanese Yen
-	"cny", // Chinese Yuan
-	"krw", // Korean Won
-	"inr", // Indian Rupee
-	"rub", // Russian Ruble
-	"brl", // Brazilian Real
-	"zar", // South African Rand
-	"aed", // UAE Dirham
-	"aud", // Australian Dollar
-	"cad", // Canadian Dollar
-	"chf", // Swiss Franc
-	"hkd", // Hong Kong Dollar
-	"bdt", // Bangladeshi Taka
-	"sgd", // Singapore Dollar
-	"thb", // Thai Baht
-	"try", // Turkish Lira
-	"mxn", // Mexican Peso
-	"php", // Philippine Peso
-	"pln", // Polish Złoty
-	"sek", // Swedish Krona
-	"nzd", // New Zealand Dollar
-	"dkk", // Danish Krone
-	"idr", // Indonesian Rupiah
-	"ils", // Israeli New Shekel
-	"vnd", // Vietnamese Dong
-	"myr", // Malaysian Ringgit
-	"mad", // Moroccan Dirham
+    "ars", // Argentine Peso
+    "usd", // US Dollar
+    "eur", // Euro
 }

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -27,7 +27,7 @@
             });
         }
     </script>
-    <title>ExpenseOwl Dashboard</title>
+    <title>Panel ExpenseOwl</title>
     <script src="/chart.min.js"></script>
 </head>
 <body>
@@ -37,13 +37,13 @@
                 <a href="/">
                     <img src="/pwa/icon-192.png" alt="ExpenseOwl Logo" height="85" style="vertical-align: middle; margin-right: 20px;">
                 </a>
-                <a href="/" class="view-button active" data-tooltip="Dashboard">
+                <a href="/" class="view-button active" data-tooltip="Panel">
                     <i class="fa-solid fa-chart-pie"></i>
                 </a>
-                <a href="/table" class="view-button" data-tooltip="Table View">
+                <a href="/table" class="view-button" data-tooltip="Tabla">
                     <i class="fa-solid fa-table"></i>
                 </a>
-                <a href="/settings" class="view-button" data-tooltip="Settings">
+                <a href="/settings" class="view-button" data-tooltip="ConfiguraciÃƒÂ³n">
                     <i class="fa-solid fa-gear"></i>
                 </a>
             </div>
@@ -56,40 +56,40 @@
         </div>
 
         <div class="table-controls">
-            <button id="toggleExpenseFormBtn" class="nav-button"><i class="fa-solid fa-plus"></i> Add Expense</button>
+            <button id="toggleExpenseFormBtn" class="nav-button"><i class="fa-solid fa-plus"></i> Agregar gasto</button>
         </div>
 
         <div id="addExpenseContainer" style="display: none;">
             <div class="form-container">
                 <form id="expenseForm" class="expense-form">
                     <div class="form-group">
-                        <label for="name">Name</label>
+                        <label for="name">Nombre</label>
                         <input type="text" id="name" value="-" required>
                     </div>
                     
                     <div class="form-group">
-                        <label for="category">Category</label>
+                        <label for="category">CategorÃƒÂ­a</label>
                         <select id="category" required>
-                            <option value="">categories</option>
+                            <option value="">categorÃƒÂ­as</option>
                         </select>
                     </div>
     
                     <div class="form-group">
-                        <label for="tags-input">Tags</label>
+                        <label for="tags-input">Etiquetas</label>
                         <div id="tags-input-container" class="tags-input-container">
                             <div id="selected-tags" class="selected-tags"></div>
-                            <input type="text" id="tags-input" placeholder="(optional)">
+                            <input type="text" id="tags-input" placeholder="(opcional)">
                         </div>
                         <div id="tags-dropdown" class="tags-dropdown"></div>
                     </div>
                     
                     <div class="form-group">
-                        <label for="amount">Amount</label>
+                        <label for="amount">Monto</label>
                         <input type="number" id="amount" step="0.01" min="0.01" max="9000000000000000" required>
                     </div>
                     
                     <div class="form-group">
-                        <label for="date">Date</label>
+                        <label for="date">Fecha</label>
                         <input type="date" id="date" required>
                         <script>
                             const today = new Date();
@@ -102,18 +102,18 @@
                     </div>
                     
                     <div class="form-group form-group-checkbox">
-                        <label for="reportGain">Report Gain</label>
+                        <label for="reportGain">Registrar ingreso</label>
                         <input type="checkbox" id="reportGain" class="styled-checkbox">
                     </div>
     
-                    <button type="submit" class="nav-button">Add Expense</button>
+                    <button type="submit" class="nav-button">Agregar gasto</button>
                 </form>
                 <div id="formMessage" class="form-message"></div>
             </div>
         </div>
 
         <div class="chart-container">
-            <div id="noDataMessage" class="no-data" style="display: none; width: 100%;">No expenses recorded this month.</div>
+            <div id="noDataMessage" class="no-data" style="display: none; width: 100%;">No hay gastos registrados este mes.</div>
             <div class="chart-box">
                 <canvas id="categoryPieChart"></canvas>
             </div>
@@ -123,11 +123,11 @@
 
         <div id="cashflow-section" class="cashflow-container">
             <div class="cashflow-item income">
-                <div class="cashflow-label">Income</div>
+                <div class="cashflow-label">Ingresos</div>
                 <div class="cashflow-value" id="cashflow-income"></div>
             </div>
             <div class="cashflow-item expenses">
-                <div class="cashflow-label">Expenses</div>
+                <div class="cashflow-label">Gastos</div>
                 <div class="cashflow-value" id="cashflow-expenses"></div>
             </div>
             <div class="cashflow-item balance">
@@ -334,7 +334,7 @@
         async function initialize() {
             try {
                 const configResponse = await fetch('/config');
-                if (!configResponse.ok) throw new Error('Failed to fetch configuration');
+                if (!configResponse.ok) throw new Error('No se pudo obtener la configuraciÃ³n');
                 const config = await configResponse.json();
                 const categorySelect = document.getElementById('category');
                 categorySelect.innerHTML = config.categories.map(cat => 
@@ -344,7 +344,7 @@
                 startDate = config.startDate;
                 
                 const response = await fetch('/expenses');
-                if (!response.ok) throw new Error('Failed to fetch data');
+                if (!response.ok) throw new Error('No se pudieron obtener los datos');
                 const data = await response.json();
                 allExpenses = Array.isArray(data) ? data : (data && Array.isArray(data.expenses) ? data.expenses : []);
 
@@ -361,7 +361,7 @@
                 updateChartAndLegend();
                 setupTagInput();
             } catch (error) {
-                console.error('Failed to initialize dashboard:', error);
+                console.error('No se pudo inicializar el panel:', error);
             }
         }
 
@@ -385,7 +385,7 @@
                     pill.textContent = tag;
                     const removeBtn = document.createElement('span');
                     removeBtn.className = 'remove-tag';
-                    removeBtn.textContent = '×';
+                    removeBtn.textContent = 'Ãƒâ€”';
                     removeBtn.onclick = () => {
                         selectedTags.delete(tag);
                         pill.remove();
@@ -472,7 +472,7 @@
                 this.innerHTML = '<i class="fa-solid fa-times"></i> Close';
             } else {
                 formContainer.style.display = 'none';
-                this.innerHTML = '<i class="fa-solid fa-plus"></i> Add Expense';
+                this.innerHTML = '<i class="fa-solid fa-plus"></i> Agregar gasto';
             }
         });
 
@@ -498,7 +498,7 @@
                 });
                 const messageDiv = document.getElementById('formMessage');
                 if (response.ok) {
-                    messageDiv.textContent = 'Expense added successfully!';
+                messageDiv.textContent = 'Gasto agregado con exito!';
                     messageDiv.className = 'form-message success';
                     document.getElementById('expenseForm').reset();
                     document.getElementById('selected-tags').innerHTML = '';
@@ -511,7 +511,7 @@
                     document.getElementById('date').value = `${year}-${month}-${day}`;
                 } else {
                     const error = await response.json();
-                    messageDiv.textContent = `Error: ${error.error || 'Failed to add expense'}`;
+                    messageDiv.textContent = `Error: ${error.error || 'No se pudo agregar el gasto'}`;
                     messageDiv.className = 'form-message error';
                 }
                 setTimeout(() => {
@@ -521,7 +521,7 @@
             } catch (error) {
                 console.error('Error adding expense:', error);
                 const messageDiv = document.getElementById('formMessage');
-                messageDiv.textContent = 'Error: Failed to add expense';
+                messageDiv.textContent = 'Error: No se pudo agregar el gasto';
                 messageDiv.className = 'form-message error';
             }
         });

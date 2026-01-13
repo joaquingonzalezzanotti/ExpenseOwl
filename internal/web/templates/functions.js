@@ -4,36 +4,9 @@ const colorPalette = [
     '#FB5607', '#38B000', '#9B5DE5', '#F15BB5'
 ];
 const currencyBehaviors = {
+    ars: {symbol: "$", useComma: true, useDecimals: true, useSpace: false, right: false},
     usd: {symbol: "$", useComma: false, useDecimals: true, useSpace: false, right: false},
-    eur: {symbol: "€", useComma: true, useDecimals: true, useSpace: false, right: false},
-    gbp: {symbol: "£", useComma: false, useDecimals: true, useSpace: false, right: false},
-    jpy: {symbol: "¥", useComma: false, useDecimals: false, useSpace: false, right: false},
-    cny: {symbol: "¥", useComma: false, useDecimals: true, useSpace: false, right: false},
-    krw: {symbol: "₩", useComma: false, useDecimals: false, useSpace: false, right: false},
-    inr: {symbol: "₹", useComma: false, useDecimals: true, useSpace: false, right: false},
-    rub: {symbol: "₽", useComma: true, useDecimals: true, useSpace: false, right: false},
-    brl: {symbol: "R$", useComma: true, useDecimals: true, useSpace: false, right: false},
-    zar: {symbol: "R", useComma: false, useDecimals: true, useSpace: true, right: true},
-    aed: {symbol: "AED", useComma: false, useDecimals: true, useSpace: true, right: true},
-    aud: {symbol: "A$", useComma: false, useDecimals: true, useSpace: false, right: false},
-    cad: {symbol: "C$", useComma: false, useDecimals: true, useSpace: false, right: false},
-    chf: {symbol: "Fr", useComma: false, useDecimals: true, useSpace: true, right: true},
-    hkd: {symbol: "HK$", useComma: false, useDecimals: true, useSpace: false, right: false},
-    bdt: {symbol: "৳", useComma: false, useDecimals: true, useSpace: false, right: false},
-    sgd: {symbol: "S$", useComma: false, useDecimals: true, useSpace: false, right: false},
-    thb: {symbol: "฿", useComma: false, useDecimals: true, useSpace: false, right: false},
-    try: {symbol: "₺", useComma: true, useDecimals: true, useSpace: false, right: false},
-    mxn: {symbol: "Mex$", useComma: false, useDecimals: true, useSpace: false, right: false},
-    php: {symbol: "₱", useComma: false, useDecimals: true, useSpace: false, right: false},
-    pln: {symbol: "zł", useComma: true, useDecimals: true, useSpace: true, right: true},
-    sek: {symbol: "kr", useComma: false, useDecimals: true, useSpace: true, right: true},
-    nzd: {symbol: "NZ$", useComma: false, useDecimals: true, useSpace: false, right: false},
-    dkk: {symbol: "kr.", useComma: true, useDecimals: true, useSpace: true, right: true},
-    idr: {symbol: "Rp", useComma: false, useDecimals: true, useSpace: true, right: true},
-    ils: {symbol: "₪", useComma: false, useDecimals: true, useSpace: false, right: false},
-    vnd: {symbol: "₫", useComma: true, useDecimals: false, useSpace: true, right: true},
-    myr: {symbol: "RM", useComma: false, useDecimals: true, useSpace: false, right: false},
-    mad: {symbol: "DH", useComma: false, useDecimals: true, useSpace: true, right: true},
+    eur: {symbol: "EUR", useComma: true, useDecimals: true, useSpace: false, right: false},
 };
 
 function formatCurrency(amount) {
@@ -62,7 +35,7 @@ function getUserTimeZone() {
 }
 
 function formatMonth(date) {
-    return date.toLocaleDateString('en-US', {
+    return date.toLocaleDateString('es-AR', {
         year: 'numeric',
         month: 'long',
         timeZone: getUserTimeZone()
@@ -81,7 +54,7 @@ function getISODateWithLocalTime(dateInput) {
 
 function formatDateFromUTC(utcDateString) {
     const date = new Date(utcDateString);
-    return date.toLocaleDateString('en-US', {
+    return date.toLocaleDateString('es-AR', {
         month: 'short',
         day: 'numeric',
         year: 'numeric',
