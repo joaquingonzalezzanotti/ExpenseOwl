@@ -55,6 +55,9 @@
                 <h2 align="center">Moneda</h2>
                 <div class="currency-selector">
                     <select id="currencySelect">
+                        <option value="ars">ARS ($)</option>
+                        <option value="usd">USD ($)</option>
+                        <option value="eur">EUR (€)</option>
                     </select>
                     <button id="saveCurrency" class="nav-button">Guardar</button>
                 </div>
@@ -475,10 +478,13 @@
         // --- Currency & Start Date ---
         function populateCurrencySelect() {
             const select = document.getElementById('currencySelect');
-            select.innerHTML = Object.keys(currencyBehaviors).map(code => 
-                `<option value="${code}" ${code === currentCurrency ? 'selected' : ''}>
-                    ${code.toUpperCase()} (${currencyBehaviors[code].symbol})
-                </option>`
+            const currencies = [
+                { code: 'ars', label: 'ARS ($)' },
+                { code: 'usd', label: 'USD ($)' },
+                { code: 'eur', label: 'EUR (€)' },
+            ];
+            select.innerHTML = currencies.map(({code, label}) => 
+                `<option value="${code}" ${code === currentCurrency ? 'selected' : ''}>${label}</option>`
             ).join('');
         }
         
