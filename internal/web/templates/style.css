@@ -452,10 +452,17 @@ header {
 
 .cashflow-container {
     display: flex;
-    justify-content: space-between;
+    flex-direction: column;
     gap: 1rem;
     margin-bottom: 1rem;
+}
+
+.cashflow-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
     align-items: stretch;
+    flex-wrap: wrap;
 }
 
 .cashflow-item {
@@ -737,10 +744,14 @@ header {
     }
 
     .cashflow-container {
-        flex-direction: row;
-        justify-content: space-around;
+        flex-direction: column;
+        align-items: stretch;
     }
-    
+
+    .cashflow-row {
+        flex-direction: column;
+    }
+
     .cashflow-item {
         padding: 0.5rem;
     }

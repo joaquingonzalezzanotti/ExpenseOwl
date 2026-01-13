@@ -94,6 +94,20 @@
                     </div>
                     
                     <div class="form-group">
+                        <label for="sourceSelect">Metodo</label>
+                        <select id="sourceSelect">
+                            <option value="CA">CA</option>
+                            <option value="EFECTIVO">Efectivo</option>
+                            <option value="TARJETA">Tarjeta</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group" id="cardGroup" style="display:none;">
+                        <label for="cardInput">Tarjeta</label>
+                        <input type="text" id="cardInput" placeholder="Ej: Visa, Amex">
+                    </div>
+
+                    <div class="form-group">
                         <label for="date">Fecha</label>
                         <input type="date" id="date" required>
                         <script>
@@ -132,6 +146,7 @@
     <script src="/functions.js"></script>
     <script>
         let currentCurrency = 'usd';
+        let baseCurrency = 'ars';
         let startDate = 1;
         let pieChart = null;
         let currentDate = new Date();
@@ -141,7 +156,8 @@
         let allTags = new Set();
         let selectedTags = new Set();
         const supportedCurrencies = Object.keys(currencyBehaviors);
-        let baseCurrency = 'ars';
+        const sourceSelect = document.getElementById('sourceSelect');
+        const cardGroup = document.getElementById('cardGroup');
 
         function formatCurrencyWithCurrency(amount, currencyCode) {
             const behavior = currencyBehaviors[currencyCode] || currencyBehaviors[currentCurrency] || {symbol:"$",useComma:false,useDecimals:true,useSpace:false,right:false};
@@ -201,7 +217,8 @@
             const legendBox = document.getElementById('customLegend');
             const cashflowSection = document.getElementById('cashflow-section');
             const noDataMessage = document.getElementById('noDataMessage');
-            const hasExpenses = monthExpenses.some(e => e.amount < 0);
+
+            const hasExpenses = monthExpenses.length > 0;
             if (!hasExpenses) {
                 if (pieChart) {
                     pieChart.destroy();
@@ -211,15 +228,24 @@
                 legendBox.style.display = 'none';
                 cashflowSection.style.display = 'none';
                 noDataMessage.style.display = 'block';
+                return;
+            }
+
+            // Cashflow por moneda (usa todas las monedas)
+            renderCashflowByCurrency(monthExpenses);
+            cashflowSection.style.display = 'flex';
+            noDataMessage.style.display = 'none';
+
+            // Grafico solo para moneda base y gastos
+            const filteredForChart = monthExpenses.filter(e => e.currency === baseCurrency && e.amount < 0);
+            if (filteredForChart.length === 0) {
+                if (pieChart) { pieChart.destroy(); pieChart = null; }
+                chartBox.style.display = 'none';
+                legendBox.style.display = 'none';
             } else {
                 chartBox.style.display = 'flex';
                 legendBox.style.display = 'flex';
-                cashflowSection.style.display = 'flex';
-                noDataMessage.style.display = 'none';
-                
-            const filteredForChart = monthExpenses.filter(e => e.currency === baseCurrency);
                 const categoryData = calculateCategoryBreakdown(filteredForChart);
-                renderCashflowByCurrency(monthExpenses);
                 createPieChart(categoryData);
                 updateLegend(categoryData);
             }
@@ -229,28 +255,55 @@
             const container = document.getElementById('cashflow-section');
             container.innerHTML = '';
             const byCurrency = expenses.reduce((acc, exp) => {
-                const cur = exp.currency || currentCurrency;
+                const cur = exp.currency || baseCurrency;
                 acc[cur] = acc[cur] || { income: 0, expense: 0 };
                 if (exp.amount > 0) acc[cur].income += exp.amount;
                 else acc[cur].expense += Math.abs(exp.amount);
                 return acc;
             }, {});
-            supportedCurrencies.forEach(cur => {
+
+            // Base currency summary cards (Income/Expenses/Balance)
+            const baseData = byCurrency[baseCurrency] || { income: 0, expense: 0 };
+            if (baseData) {
+                const baseWrapper = document.createElement('div');
+                baseWrapper.className = 'cashflow-row base-currency';
+                const balance = baseData.income - baseData.expense;
+                baseWrapper.innerHTML = `
+                    <div class="cashflow-item income">
+                        <div class="cashflow-label">Ingresos ${baseCurrency.toUpperCase()}</div>
+                        <div class="cashflow-value">${formatCurrencyWithCurrency(baseData.income, baseCurrency)}</div>
+                    </div>
+                    <div class="cashflow-item expenses">
+                        <div class="cashflow-label">Gastos ${baseCurrency.toUpperCase()}</div>
+                        <div class="cashflow-value">${formatCurrencyWithCurrency(baseData.expense, baseCurrency)}</div>
+                    </div>
+                    <div class="cashflow-item balance">
+                        <div class="cashflow-label">Balance ${baseCurrency.toUpperCase()}</div>
+                        <div class="cashflow-value ${balance >= 0 ? 'positive' : 'negative'}">${formatCurrencyWithCurrency(balance, baseCurrency)}</div>
+                    </div>
+                `;
+                container.appendChild(baseWrapper);
+            }
+
+            // Other currencies as single rows
+            supportedCurrencies.filter(cur => cur !== baseCurrency).forEach(cur => {
                 const data = byCurrency[cur];
                 if (!data) return;
                 const balance = data.income - data.expense;
                 if (balance === 0 && data.income === 0 && data.expense === 0) return;
-                const item = document.createElement('div');
-                item.className = 'cashflow-item balance';
-                item.innerHTML = `
-                    <div class="cashflow-label">Balance ${cur.toUpperCase()}</div>
-                    <div class="cashflow-value ${balance >=0 ? 'positive' : 'negative'}">${formatCurrencyWithCurrency(balance, cur)}</div>
-                    <div class="cashflow-sub">
-                        <span>Ingresos: ${formatCurrencyWithCurrency(data.income, cur)}</span>
-                        <span>Gastos: ${formatCurrencyWithCurrency(data.expense, cur)}</span>
+                const row = document.createElement('div');
+                row.className = 'cashflow-row';
+                row.innerHTML = `
+                    <div class="cashflow-item balance">
+                        <div class="cashflow-label">Balance ${cur.toUpperCase()}</div>
+                        <div class="cashflow-value ${balance >=0 ? 'positive' : 'negative'}">${formatCurrencyWithCurrency(balance, cur)}</div>
+                        <div class="cashflow-sub">
+                            <span>Ingresos: ${formatCurrencyWithCurrency(data.income, cur)}</span>
+                            <span>Gastos: ${formatCurrencyWithCurrency(data.expense, cur)}</span>
+                        </div>
                     </div>
                 `;
-                container.appendChild(item);
+                container.appendChild(row);
             });
         }
 
@@ -280,7 +333,7 @@
                                     const value = context.raw;
                                     const total = context.dataset.data.reduce((sum, val) => sum + val, 0);
                                     const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
-                                    return `${context.label}: ${formatCurrency(value)} (${percentage}%)`;
+                                    return `${context.label}: ${formatCurrencyWithCurrency(value, baseCurrency)} (${percentage}%)`;
                                 }
                             }
                         }
@@ -311,7 +364,7 @@
                 const color = categoryColors[category];
                 const categoryDataItem = categoryMap.get(category);
                 const percentage = categoryDataItem ? ` (${categoryDataItem.percentage.toFixed(1)}%)` : '';
-                const amount = categoryDataItem ? formatCurrency(categoryDataItem.total) : '';
+                const amount = categoryDataItem ? formatCurrencyWithCurrency(categoryDataItem.total, baseCurrency) : '';
                 item.innerHTML = `
                     <div class="color-box" style="background-color: ${color}"></div>
                     <div class="legend-text">
@@ -332,7 +385,7 @@
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                         <span>Total:</span>
                         <span class="amount">
-                            ${formatCurrency(activeTotalExpenses)}
+                            ${formatCurrencyWithCurrency(activeTotalExpenses, baseCurrency)}
                         </span>
                     </div>
                 </div>
@@ -358,8 +411,11 @@
                 categorySelect.innerHTML = config.categories.map(cat => 
                     `<option value="${cat}">${cat}</option>`
                 ).join('');
-                currentCurrency = config.currency;
-                baseCurrency = config.currency;
+                currentCurrency = (config.currency || 'ars').toLowerCase();
+                if (!supportedCurrencies.includes(currentCurrency)) {
+                    currentCurrency = 'ars';
+                }
+                baseCurrency = currentCurrency;
                 populateFormCurrency();
                 startDate = config.startDate;
                 
@@ -367,6 +423,12 @@
                 if (!response.ok) throw new Error('No se pudieron obtener los datos');
                 const data = await response.json();
                 allExpenses = Array.isArray(data) ? data : (data && Array.isArray(data.expenses) ? data.expenses : []);
+                allExpenses = allExpenses.map(exp => ({
+                    ...exp,
+                    currency: exp.currency || baseCurrency,
+                    source: exp.source || '',
+                    card: exp.card || '',
+                }));
 
                 allTags.clear();
                 allExpenses.forEach(exp => {
@@ -501,6 +563,16 @@
             select.innerHTML = supportedCurrencies.map(code => `<option value="${code}" ${code === currentCurrency ? 'selected' : ''}>${code.toUpperCase()}</option>`).join('');
         }
 
+        function toggleCardInput() {
+            const source = sourceSelect.value;
+            if (source === 'TARJETA') {
+                cardGroup.style.display = 'block';
+            } else {
+                cardGroup.style.display = 'none';
+                document.getElementById('cardInput').value = '';
+            }
+        }
+
         document.getElementById('expenseForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const isGain = document.getElementById('reportGain').checked;
@@ -508,6 +580,7 @@
             if (!isGain) {
                 amount *= -1;
             }
+            const sourceValue = sourceSelect.value || 'CA';
             const formData = {
                 name: document.getElementById('name').value,
                 category: document.getElementById('category').value,
@@ -515,6 +588,8 @@
                 date: getISODateWithLocalTime(document.getElementById('date').value),
                 tags: Array.from(selectedTags),
                 currency: document.getElementById('currencySelectForm').value || currentCurrency,
+                source: sourceValue,
+                card: sourceValue === 'TARJETA' ? document.getElementById('cardInput').value : '',
             };
             try {
                 const response = await fetch('/expense', {
@@ -530,6 +605,8 @@
                 document.getElementById('selected-tags').innerHTML = '';
                 selectedTags.clear();
                 populateFormCurrency();
+                sourceSelect.value = 'CA';
+                toggleCardInput();
                 await initialize();
                     const today = new Date();
                     const year = today.getFullYear();
@@ -559,6 +636,9 @@
                 e.target.value = '';
             }
         });
+
+        sourceSelect.addEventListener('change', toggleCardInput);
+        toggleCardInput();
     </script>
 </body>
 </html>

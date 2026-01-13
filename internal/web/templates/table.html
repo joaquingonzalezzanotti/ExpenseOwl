@@ -80,6 +80,20 @@
                     <label for="currencySelectForm">Moneda</label>
                     <select id="currencySelectForm" required></select>
                 </div>
+
+                <div class="form-group">
+                    <label for="sourceSelect">Metodo</label>
+                    <select id="sourceSelect">
+                        <option value="CA">CA</option>
+                        <option value="EFECTIVO">Efectivo</option>
+                        <option value="TARJETA">Tarjeta</option>
+                    </select>
+                </div>
+
+                <div class="form-group" id="cardGroup" style="display:none;">
+                    <label for="cardInput">Tarjeta</label>
+                    <input type="text" id="cardInput" placeholder="Ej: Visa, Amex">
+                </div>
                 
                 <div class="form-group">
                     <label for="date">Fecha</label>
@@ -129,6 +143,8 @@
         let allTags = new Set();
         let selectedTags = new Set();
         const supportedCurrencies = Object.keys(currencyBehaviors);
+        const sourceSelect = document.getElementById('sourceSelect');
+        const cardGroup = document.getElementById('cardGroup');
 
         function formatCurrencyWithCurrency(amount, currencyCode) {
             const behavior = currencyBehaviors[currencyCode] || currencyBehaviors[currentCurrency] || {symbol:"$",useComma:false,useDecimals:true,useSpace:false,right:false};
@@ -158,6 +174,8 @@
                             <th>Name</th>
                             <th>Category</th>
                             <th>Moneda</th>
+                            <th>Metodo</th>
+                            <th>Tarjeta</th>
                             ${hasTags ? '<th class="tags-column">Tags</th>' : ''}
                             <th>Amount</th>
                             <th class="date-header">Date</th>
@@ -170,6 +188,8 @@
                                 <td>${escapeHTML(expense.name)}</td>
                                 <td>${escapeHTML(expense.category)}</td>
                                 <td>${(expense.currency || currentCurrency).toUpperCase()}</td>
+                                <td>${expense.source ? escapeHTML(expense.source) : '-'}</td>
+                                <td>${expense.source === 'TARJETA' ? escapeHTML(expense.card || '-') : '-'}</td>
                                 ${hasTags ? `<td class="tags-column">${(expense.tags || []).map(escapeHTML).join(', ')}</td>` : ''}
                                 <td class="amount">${formatCurrencyWithCurrency(expense.amount, expense.currency || currentCurrency)}</td>
                                 <td class="date-column">${formatDateFromUTC(expense.date)}</td>
@@ -235,7 +255,12 @@
             document.getElementById('amount').value = Math.abs(amount);
             document.getElementById('reportGain').checked = isGain;
             renderSelectedTags(tags);
-            document.getElementById('currencySelectForm').value = (expensesForTable.find(e => e.id === id)?.currency) || currentCurrency;
+            const exp = expensesForTable.find(e => e.id === id);
+            document.getElementById('currencySelectForm').value = (exp?.currency) || currentCurrency;
+            const sourceValue = exp?.source || 'CA';
+            sourceSelect.value = sourceValue;
+            document.getElementById('cardInput').value = exp?.card || '';
+            toggleCardInput();
             
             const localDate = new Date(date);
             const year = localDate.getFullYear();
@@ -329,6 +354,15 @@
             select.innerHTML = supportedCurrencies.map(code => `<option value="${code}" ${code === currentCurrency ? 'selected' : ''}>${code.toUpperCase()}</option>`).join('');
         }
 
+        function toggleCardInput() {
+            if (sourceSelect.value === 'TARJETA') {
+                cardGroup.style.display = 'block';
+            } else {
+                cardGroup.style.display = 'none';
+                document.getElementById('cardInput').value = '';
+            }
+        }
+
         async function initialize() {
             try {
                 const configResponse = await fetch('/config');
@@ -338,7 +372,10 @@
                 categorySelect.innerHTML = config.categories.map(cat => 
                     `<option value="${cat}">${cat}</option>`
                 ).join('');
-                currentCurrency = config.currency;
+                currentCurrency = (config.currency || 'ars').toLowerCase();
+                if (!supportedCurrencies.includes(currentCurrency)) {
+                    currentCurrency = 'ars';
+                }
                 populateFormCurrency();
                 startDate = config.startDate;
                 
@@ -346,6 +383,12 @@
                 if (!response.ok) throw new Error('No se pudieron obtener los datos');
                 const data = await response.json();
                 allExpenses = Array.isArray(data) ? data : (data && Array.isArray(data.expenses) ? data.expenses : []);
+                allExpenses = allExpenses.map(exp => ({
+                    ...exp,
+                    currency: exp.currency || currentCurrency,
+                    source: exp.source || '',
+                    card: exp.card || '',
+                }));
                 
                 allTags.clear();
                 allExpenses.forEach(exp => {
@@ -431,6 +474,7 @@
             if (!isGain) {
                 amount *= -1;
             }
+            const sourceValue = sourceSelect.value || 'CA';
 
             const formData = {
                 name: document.getElementById('name').value,
@@ -439,6 +483,8 @@
                 date: getISODateWithLocalTime(document.getElementById('date').value),
                 tags: Array.from(selectedTags),
                 currency: document.getElementById('currencySelectForm').value || currentCurrency,
+                source: sourceValue,
+                card: sourceValue === 'TARJETA' ? document.getElementById('cardInput').value : '',
             };
             try {
                 const url = editId ? `/expense/edit?id=${editId}` : '/expense';
@@ -457,6 +503,8 @@
                     delete form.dataset.editId;
                     form.querySelector('button[type="submit"]').textContent = 'Agregar gasto';
                     populateFormCurrency();
+                    sourceSelect.value = 'CA';
+                    toggleCardInput();
                     await initialize();
                     const today = new Date();
                     const year = today.getFullYear();
@@ -486,6 +534,9 @@
                 e.target.value = '';
             }
         });
+
+        sourceSelect.addEventListener('change', toggleCardInput);
+        toggleCardInput();
         
         window.editExpenseByIndex = editExpenseByIndex;
     </script>
