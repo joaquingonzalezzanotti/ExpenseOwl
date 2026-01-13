@@ -87,6 +87,11 @@
                         <label for="amount">Monto</label>
                         <input type="number" id="amount" step="0.01" min="0.01" max="9000000000000000" required>
                     </div>
+
+                    <div class="form-group">
+                        <label for="currencySelectForm">Moneda</label>
+                        <select id="currencySelectForm" required></select>
+                    </div>
                     
                     <div class="form-group">
                         <label for="date">Fecha</label>
@@ -121,20 +126,7 @@
             </div>
         </div>
 
-        <div id="cashflow-section" class="cashflow-container">
-            <div class="cashflow-item income">
-                <div class="cashflow-label">Ingresos</div>
-                <div class="cashflow-value" id="cashflow-income"></div>
-            </div>
-            <div class="cashflow-item expenses">
-                <div class="cashflow-label">Gastos</div>
-                <div class="cashflow-value" id="cashflow-expenses"></div>
-            </div>
-            <div class="cashflow-item balance">
-                <div class="cashflow-label">Balance</div>
-                <div class="cashflow-value" id="cashflow-balance"></div>
-            </div>
-        </div>
+        <div id="cashflow-section" class="cashflow-container"></div>
     </div>
 
     <script src="/functions.js"></script>
@@ -148,6 +140,20 @@
         let categoryColors = {};
         let allTags = new Set();
         let selectedTags = new Set();
+        const supportedCurrencies = Object.keys(currencyBehaviors);
+
+        function formatCurrencyWithCurrency(amount, currencyCode) {
+            const behavior = currencyBehaviors[currencyCode] || currencyBehaviors[currentCurrency] || {symbol:"$",useComma:false,useDecimals:true,useSpace:false,right:false};
+            const isNegative = amount < 0;
+            const absAmount = Math.abs(amount);
+            const options = {
+                minimumFractionDigits: behavior.useDecimals ? 2 : 0,
+                maximumFractionDigits: behavior.useDecimals ? 2 : 0,
+            };
+            const formatted = new Intl.NumberFormat(behavior.useComma ? "de-DE" : "en-US", options).format(absAmount);
+            const result = behavior.right ? `${formatted}${behavior.useSpace ? " " : ""}${behavior.symbol}` : `${behavior.symbol}${behavior.useSpace ? " " : ""}${formatted}`;
+            return isNegative ? `-${result}` : result;
+        }
 
         function assignCategoryColors(categories) {
             categories.forEach((category, index) => {
@@ -210,30 +216,41 @@
                 cashflowSection.style.display = 'flex';
                 noDataMessage.style.display = 'none';
                 
-                const categoryData = calculateCategoryBreakdown(monthExpenses);
-                updateCashflow(monthExpenses);
+                const filteredForChart = monthExpenses.filter(e => e.currency === currentCurrency);
+                const categoryData = calculateCategoryBreakdown(filteredForChart);
+                renderCashflowByCurrency(monthExpenses);
                 createPieChart(categoryData);
                 updateLegend(categoryData);
             }
         }
 
-        function updateCashflow(expenses) {
-            const income = calculateIncome(expenses);
-            const expenseTotal = calculateExpenses(expenses);
-            const balance = income - expenseTotal;
-            
-            document.getElementById('cashflow-income').textContent = formatCurrency(income);
-            document.getElementById('cashflow-expenses').textContent = formatCurrency(expenseTotal);
-            document.getElementById('cashflow-balance').textContent = formatCurrency(balance);
-            
-            const balanceElement = document.getElementById('cashflow-balance');
-            if (balance >= 0) {
-                balanceElement.classList.add('positive');
-                balanceElement.classList.remove('negative');
-            } else {
-                balanceElement.classList.add('negative');
-                balanceElement.classList.remove('positive');
-            }
+        function renderCashflowByCurrency(expenses) {
+            const container = document.getElementById('cashflow-section');
+            container.innerHTML = '';
+            const byCurrency = expenses.reduce((acc, exp) => {
+                const cur = exp.currency || currentCurrency;
+                acc[cur] = acc[cur] || { income: 0, expense: 0 };
+                if (exp.amount > 0) acc[cur].income += exp.amount;
+                else acc[cur].expense += Math.abs(exp.amount);
+                return acc;
+            }, {});
+            supportedCurrencies.forEach(cur => {
+                const data = byCurrency[cur];
+                if (!data) return;
+                const balance = data.income - data.expense;
+                if (balance === 0 && data.income === 0 && data.expense === 0) return;
+                const item = document.createElement('div');
+                item.className = 'cashflow-item balance';
+                item.innerHTML = `
+                    <div class="cashflow-label">Balance ${cur.toUpperCase()}</div>
+                    <div class="cashflow-value ${balance >=0 ? 'positive' : 'negative'}">${formatCurrencyWithCurrency(balance, cur)}</div>
+                    <div class="cashflow-sub">
+                        <span>Ingresos: ${formatCurrencyWithCurrency(data.income, cur)}</span>
+                        <span>Gastos: ${formatCurrencyWithCurrency(data.expense, cur)}</span>
+                    </div>
+                `;
+                container.appendChild(item);
+            });
         }
 
         function createPieChart(categoryData) {
@@ -274,7 +291,7 @@
         function updateLegend(categoryData) {
             const legendContainer = document.getElementById('customLegend');
             legendContainer.innerHTML = '';
-            const monthExpenses = getMonthExpenses(allExpenses);
+            const monthExpenses = getMonthExpenses(allExpenses).filter(exp => exp.currency === currentCurrency);
             const currentMonthCategories = [...new Set(monthExpenses
                 .filter(exp => exp.amount < 0)
                 .map(exp => exp.category))];
@@ -341,6 +358,7 @@
                     `<option value="${cat}">${cat}</option>`
                 ).join('');
                 currentCurrency = config.currency;
+                populateFormCurrency();
                 startDate = config.startDate;
                 
                 const response = await fetch('/expenses');
@@ -476,6 +494,11 @@
             }
         });
 
+        function populateFormCurrency() {
+            const select = document.getElementById('currencySelectForm');
+            select.innerHTML = supportedCurrencies.map(code => `<option value="${code}" ${code === currentCurrency ? 'selected' : ''}>${code.toUpperCase()}</option>`).join('');
+        }
+
         document.getElementById('expenseForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             const isGain = document.getElementById('reportGain').checked;
@@ -488,7 +511,8 @@
                 category: document.getElementById('category').value,
                 amount: amount,
                 date: getISODateWithLocalTime(document.getElementById('date').value),
-                tags: Array.from(selectedTags)
+                tags: Array.from(selectedTags),
+                currency: document.getElementById('currencySelectForm').value || currentCurrency,
             };
             try {
                 const response = await fetch('/expense', {
@@ -499,11 +523,12 @@
                 const messageDiv = document.getElementById('formMessage');
                 if (response.ok) {
                 messageDiv.textContent = 'Gasto agregado con exito!';
-                    messageDiv.className = 'form-message success';
-                    document.getElementById('expenseForm').reset();
-                    document.getElementById('selected-tags').innerHTML = '';
-                    selectedTags.clear();
-                    await initialize();
+                messageDiv.className = 'form-message success';
+                document.getElementById('expenseForm').reset();
+                document.getElementById('selected-tags').innerHTML = '';
+                selectedTags.clear();
+                populateFormCurrency();
+                await initialize();
                     const today = new Date();
                     const year = today.getFullYear();
                     const month = String(today.getMonth() + 1).padStart(2, '0');

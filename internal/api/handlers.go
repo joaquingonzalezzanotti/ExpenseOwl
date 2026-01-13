@@ -180,6 +180,11 @@ func (h *Handler) AddExpense(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: err.Error()})
 		return
 	}
+	if expense.Currency == "" {
+		if cfgCur, err := h.storage.GetCurrency(); err == nil {
+			expense.Currency = cfgCur
+		}
+	}
 	if expense.Date.IsZero() {
 		expense.Date = time.Now()
 	}
@@ -223,6 +228,11 @@ func (h *Handler) EditExpense(w http.ResponseWriter, r *http.Request) {
 	if err := expense.Validate(); err != nil {
 		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: err.Error()})
 		return
+	}
+	if expense.Currency == "" {
+		if cfgCur, err := h.storage.GetCurrency(); err == nil {
+			expense.Currency = cfgCur
+		}
 	}
 	if err := h.storage.UpdateExpense(id, expense); err != nil {
 		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "Failed to edit expense"})

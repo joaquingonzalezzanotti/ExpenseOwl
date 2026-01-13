@@ -90,6 +90,8 @@ type Expense struct {
 	Category    string    `json:"category"`
 	Amount      float64   `json:"amount"`
 	Currency    string    `json:"currency"`
+	Source      string    `json:"source"`
+	Card        string    `json:"card"`
 	Date        time.Time `json:"date"`
 }
 
@@ -178,6 +180,8 @@ func (e *Expense) Validate() error {
 	if e.Amount == 0 {
 		return fmt.Errorf("expense 'amount' cannot be 0")
 	}
+	e.Source = SanitizeString(e.Source)
+	e.Card = SanitizeString(e.Card)
 	// if e.Currency == "" {
 	// 	return fmt.Errorf("expense 'currency' cannot be empty")
 	// }
