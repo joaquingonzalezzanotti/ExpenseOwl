@@ -43,7 +43,7 @@
                 <a href="/table" class="view-button" data-tooltip="Tabla">
                     <i class="fa-solid fa-table"></i>
                 </a>
-                <a href="/settings" class="view-button" data-tooltip="ConfiguraciÃƒÂ³n">
+                <a href="/settings" class="view-button" data-tooltip="Configuracion">
                     <i class="fa-solid fa-gear"></i>
                 </a>
             </div>
@@ -68,9 +68,9 @@
                     </div>
                     
                     <div class="form-group">
-                        <label for="category">CategorÃƒÂ­a</label>
+                        <label for="category">Categoria</label>
                         <select id="category" required>
-                            <option value="">categorÃƒÂ­as</option>
+                            <option value="">categorias</option>
                         </select>
                     </div>
     
@@ -334,7 +334,7 @@
         async function initialize() {
             try {
                 const configResponse = await fetch('/config');
-                if (!configResponse.ok) throw new Error('No se pudo obtener la configuraciÃ³n');
+                if (!configResponse.ok) throw new Error('No se pudo obtener la configuracion');
                 const config = await configResponse.json();
                 const categorySelect = document.getElementById('category');
                 categorySelect.innerHTML = config.categories.map(cat => 
@@ -385,7 +385,7 @@
                     pill.textContent = tag;
                     const removeBtn = document.createElement('span');
                     removeBtn.className = 'remove-tag';
-                    removeBtn.textContent = 'Ãƒâ€”';
+                    removeBtn.textContent = "x";
                     removeBtn.onclick = () => {
                         selectedTags.delete(tag);
                         pill.remove();

@@ -35,11 +35,13 @@ function getUserTimeZone() {
 }
 
 function formatMonth(date) {
-    return date.toLocaleDateString('es-AR', {
+    const formatted = date.toLocaleDateString('es-AR', {
         year: 'numeric',
         month: 'long',
         timeZone: getUserTimeZone()
     });
+    // Capitaliza la primera letra para mostrar el mes en mayuscula inicial.
+    return formatted.charAt(0).toUpperCase() + formatted.slice(1);
 }
 
 function getISODateWithLocalTime(dateInput) {

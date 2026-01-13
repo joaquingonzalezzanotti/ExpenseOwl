@@ -30,7 +30,7 @@
                 <a href="/table" class="view-button active" data-tooltip="Tabla">
                     <i class="fa-solid fa-table"></i>
                 </a>
-                <a href="/settings" class="view-button" data-tooltip="ConfiguraciÃƒÂ³n">
+                <a href="/settings" class="view-button" data-tooltip="Configuracion">
                     <i class="fa-solid fa-gear"></i>
                 </a>
             </div>
@@ -56,9 +56,9 @@
                 </div>
                 
                 <div class="form-group">
-                    <label for="category">CategorÃƒÂ­a</label>
+                    <label for="category">Categoria</label>
                     <select id="category" required>
-                        <option value="">categorÃƒÂ­as</option>
+                        <option value="">categorias</option>
                     </select>
                 </div>
 
@@ -106,7 +106,7 @@
     <div id="deleteModal" class="modal">
         <div class="modal-content">
             <h3>Eliminar gasto</h3>
-            <p>Ã‚Â¿Seguro que querÃƒÂ©s eliminar este gasto? (no se puede deshacer)</p>
+            <p>Seguro que queres eliminar este gasto? (no se puede deshacer)</p>
             <div class="modal-buttons">
                 <button class="modal-button" onclick="closeDeleteModal()">Cancelar</button>
                 <button class="modal-button confirm" onclick="confirmDelete()">Eliminar</button>
@@ -197,7 +197,7 @@
                 pill.textContent = tag;
                 const removeBtn = document.createElement('span');
                 removeBtn.className = 'remove-tag';
-                removeBtn.textContent = 'Ãƒâ€”';
+                removeBtn.textContent = "x";
                 removeBtn.onclick = () => {
                     selectedTags.delete(tag);
                     pill.remove();
@@ -224,7 +224,7 @@
             const form = document.getElementById('expenseForm');
             form.dataset.editId = id;
             const submitButton = form.querySelector('button[type="submit"]');
-            submitButton.textContent = 'Actualizar gasto';
+            submitButton.textContent = "Actualizar gasto";
             
             form.scrollIntoView({ behavior: 'smooth' });
         }
@@ -266,7 +266,7 @@
                 
                 if(value && ![...allTags].map(t => t.toLowerCase()).includes(value)) {
                     const newItem = document.createElement('div');
-                    newItem.textContent = `+ Create "${input.value.trim()}"`;
+                    newItem.textContent = `Agregar \"${input.value.trim()}\"`;
                     newItem.className = 'new-tag';
                     newItem.onclick = () => addTag(input.value.trim());
                     dropdown.appendChild(newItem);
@@ -305,7 +305,7 @@
         async function initialize() {
             try {
                 const configResponse = await fetch('/config');
-                if (!configResponse.ok) throw new Error('No se pudo obtener la configuraciÃ³n');
+                if (!configResponse.ok) throw new Error('No se pudo obtener la configuracion');
                 const config = await configResponse.json();
                 const categorySelect = document.getElementById('category');
                 categorySelect.innerHTML = config.categories.map(cat => 
@@ -439,7 +439,7 @@
                     messageDiv.className = 'form-message error';
                 }
                 setTimeout(() => {
-                    messageDiv.textContent = '';
+                    messageDiv.textContent = "";
                     messageDiv.className = 'form-message';
                 }, 3000);
             } catch (error) {
