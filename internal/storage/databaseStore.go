@@ -221,7 +221,18 @@ func scanExpense(scanner interface{ Scan(...any) error }) (Expense, error) {
 	var recurringID sql.NullString
 	var source sql.NullString
 	var card sql.NullString
-	err := scanner.Scan(&expense.ID, &recurringID, &expense.Name, &expense.Category, &expense.Amount, &expense.Date, &tagsStr, &source, &card)
+	err := scanner.Scan(
+		&expense.ID,
+		&recurringID,
+		&expense.Name,
+		&expense.Category,
+		&expense.Amount,
+		&expense.Currency,
+		&expense.Date,
+		&tagsStr,
+		&source,
+		&card,
+	)
 	if err != nil {
 		return Expense{}, err
 	}
@@ -243,7 +254,7 @@ func scanExpense(scanner interface{ Scan(...any) error }) (Expense, error) {
 }
 
 func (s *databaseStore) GetAllExpenses() ([]Expense, error) {
-	query := `SELECT id, recurring_id, name, category, amount, date, tags, source, card FROM expenses ORDER BY date DESC`
+	query := `SELECT id, recurring_id, name, category, amount, currency, date, tags, source, card FROM expenses ORDER BY date DESC`
 	rows, err := s.db.Query(query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query expenses: %v", err)
@@ -262,7 +273,7 @@ func (s *databaseStore) GetAllExpenses() ([]Expense, error) {
 }
 
 func (s *databaseStore) GetExpense(id string) (Expense, error) {
-	query := `SELECT id, recurring_id, name, category, amount, date, tags, source, card FROM expenses WHERE id = $1`
+	query := `SELECT id, recurring_id, name, category, amount, currency, date, tags, source, card FROM expenses WHERE id = $1`
 	expense, err := scanExpense(s.db.QueryRow(query, id))
 	if err != nil {
 		if err == sql.ErrNoRows {

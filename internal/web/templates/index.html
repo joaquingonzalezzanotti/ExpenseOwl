@@ -141,6 +141,7 @@
         let allTags = new Set();
         let selectedTags = new Set();
         const supportedCurrencies = Object.keys(currencyBehaviors);
+        let baseCurrency = 'ars';
 
         function formatCurrencyWithCurrency(amount, currencyCode) {
             const behavior = currencyBehaviors[currencyCode] || currencyBehaviors[currentCurrency] || {symbol:"$",useComma:false,useDecimals:true,useSpace:false,right:false};
@@ -216,7 +217,7 @@
                 cashflowSection.style.display = 'flex';
                 noDataMessage.style.display = 'none';
                 
-                const filteredForChart = monthExpenses.filter(e => e.currency === currentCurrency);
+            const filteredForChart = monthExpenses.filter(e => e.currency === baseCurrency);
                 const categoryData = calculateCategoryBreakdown(filteredForChart);
                 renderCashflowByCurrency(monthExpenses);
                 createPieChart(categoryData);
@@ -291,7 +292,7 @@
         function updateLegend(categoryData) {
             const legendContainer = document.getElementById('customLegend');
             legendContainer.innerHTML = '';
-            const monthExpenses = getMonthExpenses(allExpenses).filter(exp => exp.currency === currentCurrency);
+            const monthExpenses = getMonthExpenses(allExpenses).filter(exp => exp.currency === baseCurrency);
             const currentMonthCategories = [...new Set(monthExpenses
                 .filter(exp => exp.amount < 0)
                 .map(exp => exp.category))];
@@ -358,6 +359,7 @@
                     `<option value="${cat}">${cat}</option>`
                 ).join('');
                 currentCurrency = config.currency;
+                baseCurrency = config.currency;
                 populateFormCurrency();
                 startDate = config.startDate;
                 
