@@ -41,6 +41,9 @@
             <h2 align="center">Categorias</h2>
             <div id="categories-manager">
                 <p class="section-hint">Arrastra para ordenar. Guardar aplica el orden.</p>
+                <div class="categories-meta">
+                    <span id="categories-count"></span>
+                </div>
                 <div id="categories-list" class="categories-list"></div>
                 <div id="categories-empty" class="empty-state" style="display: none;">
                     No hay categorias guardadas. Agrega la primera.
@@ -275,13 +278,16 @@
         function renderCategories() {
             const list = document.getElementById('categories-list');
             const emptyMessage = document.getElementById('categories-empty');
+            const countLabel = document.getElementById('categories-count');
             list.innerHTML = '';
             syncCategoriesLower();
             if (categories.length === 0) {
                 emptyMessage.style.display = 'block';
+                countLabel.textContent = '0 categorias';
                 return;
             }
             emptyMessage.style.display = 'none';
+            countLabel.textContent = `${categories.length} categorias`;
             categories.forEach((category, index) => {
                 const item = document.createElement('div');
                 item.className = 'category-item';
@@ -762,7 +768,8 @@
 
                 if (categoriesResponse.ok) {
                     categories = await categoriesResponse.json();
-                } else {
+                }
+                if (!categories || categories.length === 0) {
                     categories = [...(config.categories || [])];
                 }
                 currentCurrency = config.currency;

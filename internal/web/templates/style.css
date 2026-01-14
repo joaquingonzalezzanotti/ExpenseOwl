@@ -559,6 +559,12 @@ input:focus-visible {
     overflow-y: auto;
 }
 
+.categories-meta {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.5rem;
+}
+
 .category-item {
     cursor: grab;
 }
@@ -578,6 +584,7 @@ input:focus-visible {
 .category-handle-area {
     display: flex;
     align-items: center;
+    gap: 0.5rem;
 }
 .placeholder {
     border: 2px dashed var(--accent);
