@@ -1,6 +1,6 @@
-# ExpenseOwl MVP
+# ExpenseLog MVP
 
-ExpenseOwl es un tracker de gastos personal, simple y rapido. Esta version es un MVP pensado para uso individual y despliegue estable con Postgres.
+ExpenseLog es un tracker de gastos personal, simple y rapido. Esta version es un MVP pensado para uso individual y despliegue estable con Postgres.
 
 ## Principios
 - Un solo usuario, sin login por ahora.
