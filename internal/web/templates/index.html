@@ -57,15 +57,17 @@
         </div>
 
         <div class="table-controls">
-            <button id="toggleExpenseFormBtn" class="nav-button"><i class="fa-solid fa-plus"></i> Agregar gasto</button>
             <div class="quick-actions">
+                <button id="toggleExpenseFormBtn" class="quick-action" data-action="open-form">
+                    <i class="fa-solid fa-plus"></i> Agregar gasto
+                </button>
                 <button class="quick-action" data-action="income">Ingreso</button>
                 <button class="quick-action" data-action="expense">Gasto</button>
                 <button class="quick-action" data-action="card-expense">Gasto con Tarjeta</button>
             </div>
         </div>
 
-        <div id="panelSummary" class="panel-summary"></div>
+        <div id="baseSummary" class="cashflow-container"></div>
 
         <div id="addExpenseContainer" style="display: none;">
             <div class="form-container">
@@ -156,6 +158,8 @@
             <button id="clearFilters" class="nav-button">Limpiar</button>
             <span id="baseCurrencyIndicator" class="panel-indicator"></span>
         </div>
+
+        <div id="emptyStateBanner" class="empty-state" style="display: none;"></div>
 
         <div class="chart-container">
             <div id="noDataMessage" class="empty-state" style="display: none;">
@@ -249,46 +253,57 @@
         }
 
         function updateChartAndLegend() {
+            const monthExpensesAll = getMonthExpenses(allExpenses);
             const monthExpenses = getFilteredMonthExpenses();
             const chartContainer = document.querySelector('.chart-container');
             const chartBox = document.querySelector('.chart-box');
             const legendBox = document.getElementById('customLegend');
             const cashflowSection = document.getElementById('cashflow-section');
             const noDataMessage = document.getElementById('noDataMessage');
+            const filtersRow = document.querySelector('.panel-filters');
+            const emptyStateBanner = document.getElementById('emptyStateBanner');
+            const baseSummary = document.getElementById('baseSummary');
 
-            const hasTransactions = monthExpenses.length > 0;
+            const hasTransactions = monthExpensesAll.length > 0;
+            const hasBaseExpenses = monthExpensesAll.some(e => (e.currency || baseCurrency) === baseCurrency && e.amount < 0);
             if (!hasTransactions) {
                 if (pieChart) {
                     pieChart.destroy();
                     pieChart = null;
                 }
-                chartContainer.style.display = 'flex';
-                chartBox.style.display = 'none';
-                legendBox.style.display = 'none';
+                chartContainer.style.display = 'none';
                 cashflowSection.style.display = 'none';
-                noDataMessage.style.display = 'block';
-                noDataMessage.innerHTML = '<strong>Aun no hay gastos.</strong> Carga el primero con + Agregar gasto.';
-                renderBaseSummary([]);
+                baseSummary.style.display = 'none';
+                filtersRow.style.display = 'none';
+                noDataMessage.style.display = 'none';
+                emptyStateBanner.style.display = 'block';
+                emptyStateBanner.innerHTML = '<strong>Aun no hay gastos.</strong> Carga el primero con + Agregar gasto.';
+                renderCashflowByCurrency([]);
                 renderRecentMovements([]);
                 return;
             }
 
             // Cashflow por moneda (usa todas las monedas)
             renderCashflowByCurrency(monthExpenses);
-            cashflowSection.style.display = 'flex';
+            cashflowSection.style.display = cashflowSection.innerHTML.trim() ? 'flex' : 'none';
+            baseSummary.style.display = baseSummary.innerHTML.trim() ? 'flex' : 'none';
             noDataMessage.style.display = 'none';
-            renderBaseSummary(monthExpenses);
+            emptyStateBanner.style.display = 'none';
             renderRecentMovements(monthExpenses);
+            filtersRow.style.display = hasBaseExpenses ? 'flex' : 'none';
 
             // Grafico solo para moneda base y gastos
             const filteredForChart = monthExpenses.filter(e => e.currency === baseCurrency && e.amount < 0);
             if (filteredForChart.length === 0) {
                 if (pieChart) { pieChart.destroy(); pieChart = null; }
-                chartContainer.style.display = 'flex';
-                chartBox.style.display = 'none';
-                legendBox.style.display = 'none';
-                noDataMessage.style.display = 'block';
-                noDataMessage.innerHTML = `<strong>No hay gastos en ${baseCurrency.toUpperCase()}.</strong> Carga el primero con + Agregar gasto.`;
+                chartContainer.style.display = 'none';
+                noDataMessage.style.display = 'none';
+                if (hasBaseExpenses) {
+                    emptyStateBanner.style.display = 'none';
+                } else {
+                    emptyStateBanner.style.display = 'block';
+                    emptyStateBanner.innerHTML = `<strong>No hay gastos en ${baseCurrency.toUpperCase()}.</strong> Carga el primero con + Agregar gasto.`;
+                }
             } else {
                 chartContainer.style.display = 'flex';
                 chartBox.style.display = 'flex';
@@ -301,7 +316,9 @@
 
         function renderCashflowByCurrency(expenses) {
             const container = document.getElementById('cashflow-section');
+            const baseContainer = document.getElementById('baseSummary');
             container.innerHTML = '';
+            baseContainer.innerHTML = '';
             const byCurrency = expenses.reduce((acc, exp) => {
                 const cur = exp.currency || baseCurrency;
                 acc[cur] = acc[cur] || { income: 0, expense: 0 };
@@ -310,9 +327,9 @@
                 return acc;
             }, {});
 
-            // Base currency summary cards (Income/Expenses/Balance)
-            const baseData = byCurrency[baseCurrency] || { income: 0, expense: 0 };
-            if (baseData) {
+            const baseData = byCurrency[baseCurrency];
+            const baseHasValue = baseData && (baseData.income !== 0 || baseData.expense !== 0);
+            if (baseHasValue) {
                 const baseWrapper = document.createElement('div');
                 baseWrapper.className = 'cashflow-row base-currency';
                 const balance = baseData.income - baseData.expense;
@@ -330,7 +347,7 @@
                         <div class="cashflow-value ${balance >= 0 ? 'positive' : 'negative'}">${formatCurrencyWithCurrency(balance, baseCurrency)}</div>
                     </div>
                 `;
-                container.appendChild(baseWrapper);
+                baseContainer.appendChild(baseWrapper);
             }
 
             // Other currencies as single rows
@@ -353,29 +370,6 @@
                 `;
                 container.appendChild(row);
             });
-        }
-
-        function renderBaseSummary(expenses) {
-            const panel = document.getElementById('panelSummary');
-            panel.innerHTML = '';
-            const baseExpenses = expenses.filter(e => (e.currency || baseCurrency) === baseCurrency);
-            const income = baseExpenses.filter(e => e.amount > 0).reduce((sum, e) => sum + e.amount, 0);
-            const expense = baseExpenses.filter(e => e.amount < 0).reduce((sum, e) => sum + Math.abs(e.amount), 0);
-            const balance = income - expense;
-            panel.innerHTML = `
-                <div class="summary-card">
-                    <div class="summary-title">Ingresos ${baseCurrency.toUpperCase()}</div>
-                    <div class="summary-value">${formatCurrencyWithCurrency(income, baseCurrency)}</div>
-                </div>
-                <div class="summary-card">
-                    <div class="summary-title">Gastos ${baseCurrency.toUpperCase()}</div>
-                    <div class="summary-value">${formatCurrencyWithCurrency(expense, baseCurrency)}</div>
-                </div>
-                <div class="summary-card">
-                    <div class="summary-title">Balance ${baseCurrency.toUpperCase()}</div>
-                    <div class="summary-value ${balance >= 0 ? 'positive' : 'negative'}">${formatCurrencyWithCurrency(balance, baseCurrency)}</div>
-                </div>
-            `;
         }
 
         function renderRecentMovements(expenses) {
@@ -638,19 +632,6 @@
             updateChartAndLegend();
         });
 
-        document.getElementById('toggleExpenseFormBtn').addEventListener('click', function() {
-            const formContainer = document.getElementById('addExpenseContainer');
-            const isHidden = formContainer.style.display === 'none' || formContainer.style.display === '';
-
-            if (isHidden) {
-                formContainer.style.display = 'block';
-                this.innerHTML = '<i class="fa-solid fa-times"></i> Close';
-            } else {
-                formContainer.style.display = 'none';
-                this.innerHTML = '<i class="fa-solid fa-plus"></i> Agregar gasto';
-            }
-        });
-
         function populateFormCurrency() {
             const select = document.getElementById('currencySelectForm');
             select.innerHTML = supportedCurrencies.map(code => `<option value="${code}" ${code === currentCurrency ? 'selected' : ''}>${code.toUpperCase()}</option>`).join('');
@@ -727,6 +708,10 @@
                 populateFormCurrency();
                 sourceSelect.value = 'CA';
                 toggleCardInput();
+                const toggleBtn = document.getElementById('toggleExpenseFormBtn');
+                if (toggleBtn && toggleBtn.dataset.action === 'open-form') {
+                    toggleBtn.innerHTML = '<i class="fa-solid fa-plus"></i> Agregar gasto';
+                }
                 await initialize();
                     const today = new Date();
                     const year = today.getFullYear();
@@ -776,9 +761,19 @@
         document.querySelectorAll('.quick-action').forEach(btn => {
             btn.addEventListener('click', () => {
                 const formContainer = document.getElementById('addExpenseContainer');
-                formContainer.style.display = 'block';
-                document.getElementById('toggleExpenseFormBtn').innerHTML = '<i class="fa-solid fa-times"></i> Close';
                 const action = btn.dataset.action;
+                if (action === 'open-form') {
+                    const isHidden = formContainer.style.display === 'none' || formContainer.style.display === '';
+                    if (isHidden) {
+                        formContainer.style.display = 'block';
+                        btn.innerHTML = '<i class="fa-solid fa-times"></i> Close';
+                    } else {
+                        formContainer.style.display = 'none';
+                        btn.innerHTML = '<i class="fa-solid fa-plus"></i> Agregar gasto';
+                    }
+                    return;
+                }
+                formContainer.style.display = 'block';
                 if (action === 'income') {
                     document.getElementById('reportGain').checked = true;
                     sourceSelect.value = 'CA';

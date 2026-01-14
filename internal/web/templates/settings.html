@@ -40,7 +40,10 @@
         <div class="form-container">
             <h2 align="center">Categorias</h2>
             <div id="categories-manager">
-                <div id="categories-list" class="categories-list">
+                <p class="section-hint">Arrastra para ordenar. Guardar aplica el orden.</p>
+                <div id="categories-list" class="categories-list"></div>
+                <div id="categories-empty" class="empty-state" style="display: none;">
+                    No hay categorias guardadas. Agrega la primera.
                 </div>
                 <div class="category-input-container">
                     <input type="text" id="newCategory" placeholder="Agregar categoria">
@@ -271,8 +274,14 @@
 
         function renderCategories() {
             const list = document.getElementById('categories-list');
+            const emptyMessage = document.getElementById('categories-empty');
             list.innerHTML = '';
             syncCategoriesLower();
+            if (categories.length === 0) {
+                emptyMessage.style.display = 'block';
+                return;
+            }
+            emptyMessage.style.display = 'none';
             categories.forEach((category, index) => {
                 const item = document.createElement('div');
                 item.className = 'category-item';
@@ -738,10 +747,11 @@
         // --- Initialization ---
         async function initialize() {
             try {
-                const [configResponse, expensesResponse, recurringExpensesResponse] = await Promise.all([
+                const [configResponse, expensesResponse, recurringExpensesResponse, categoriesResponse] = await Promise.all([
                     fetch('/config'),
                     fetch('/expenses'),
-                    fetch('/recurring-expenses')
+                    fetch('/recurring-expenses'),
+                    fetch('/categories')
                 ]);
                 if (!configResponse.ok) throw new Error('No se pudo obtener la configuracion');
                 const config = await configResponse.json();
@@ -750,7 +760,11 @@
                 if (!recurringExpensesResponse.ok) throw new Error('No se pudieron obtener las transacciones recurrentes');
                 recurringExpenses = await recurringExpensesResponse.json() || [];
 
-                categories = [...config.categories];
+                if (categoriesResponse.ok) {
+                    categories = await categoriesResponse.json();
+                } else {
+                    categories = [...(config.categories || [])];
+                }
                 currentCurrency = config.currency;
                 currentStartDate = config.startDate;
                 allTags.clear();

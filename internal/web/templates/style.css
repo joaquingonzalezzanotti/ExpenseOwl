@@ -133,41 +133,6 @@ header {
     color: var(--text-primary);
 }
 
-.panel-summary {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 1rem;
-    margin-bottom: 1rem;
-}
-
-.panel-summary .summary-card {
-    background-color: var(--bg-secondary);
-    border-radius: 12px;
-    padding: 1rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-    border: 1px solid var(--border);
-}
-
-.summary-card .summary-title {
-    font-size: 0.9rem;
-    color: var(--text-secondary);
-}
-
-.summary-card .summary-value {
-    font-size: 1.6rem;
-    font-weight: 700;
-}
-
-.summary-value.positive {
-    color: #2EAB7D;
-}
-
-.summary-value.negative {
-    color: #EF4444;
-}
-
 .panel-filters {
     display: flex;
     flex-wrap: wrap;
@@ -197,6 +162,7 @@ header {
     gap: 0.5rem;
     flex-wrap: wrap;
     margin-top: 0.75rem;
+    align-items: center;
 }
 
 .quick-action {
@@ -207,6 +173,10 @@ header {
     border-radius: 9999px;
     font-size: 0.9rem;
     cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    line-height: 1;
 }
 
 .quick-action:hover {
@@ -578,9 +548,15 @@ input:focus-visible {
 
 .categories-list {
     display: flex;
-    flex-wrap: wrap;
+    flex-direction: column;
     gap: 0.5rem;
     margin-bottom: 1rem;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.75rem;
+    background-color: var(--bg-primary);
+    max-height: 260px;
+    overflow-y: auto;
 }
 
 .category-item {
@@ -614,11 +590,12 @@ input:focus-visible {
 .category-item {
     background-color: var(--bg-primary);
     border: 1px solid var(--border);
-    border-radius: 9999px;
-    padding: 0.25rem 0.75rem;
+    border-radius: 8px;
+    padding: 0.5rem 0.75rem;
     display: flex;
     align-items: center;
     gap: 0.25rem;
+    justify-content: space-between;
 }
 
 .category-item .delete-button {
@@ -634,6 +611,12 @@ input:focus-visible {
     display: flex;
     gap: 0.5rem;
     margin-bottom: 1rem;
+}
+
+.section-hint {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.5rem;
 }
 
 .category-input-container input {
