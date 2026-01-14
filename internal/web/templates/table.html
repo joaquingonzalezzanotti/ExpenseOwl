@@ -94,6 +94,7 @@
                 <div class="form-group" id="cardGroup" style="display:none;">
                     <label for="cardInput">Tarjeta</label>
                     <input type="text" id="cardInput" placeholder="Ej: Visa, Amex">
+                    <div id="cardError" class="form-error"></div>
                 </div>
                 
                 <div class="form-group">
@@ -119,9 +120,15 @@
             <div id="formMessage" class="form-message"></div>
         </div>
 
+        <div class="search-bar">
+            <input type="text" id="tableSearch" placeholder="Buscar por nombre, categoria o etiquetas">
+            <button id="clearSearch" class="nav-button">Limpiar</button>
+        </div>
+
         <div id="tableContainer">
         </div>
     </div>
+    <div id="toastContainer" class="toast-container"></div>
 
     <div id="deleteModal" class="modal">
         <div class="modal-content">
@@ -146,6 +153,8 @@
         const supportedCurrencies = Object.keys(currencyBehaviors);
         const sourceSelect = document.getElementById('sourceSelect');
         const cardGroup = document.getElementById('cardGroup');
+        let categories = [];
+        let searchQuery = '';
 
         function formatCurrencyWithCurrency(amount, currencyCode) {
             const behavior = currencyBehaviors[currencyCode] || currencyBehaviors[currentCurrency] || {symbol:"$",useComma:false,useDecimals:true,useSpace:false,right:false};
@@ -186,13 +195,13 @@
                     <tbody>
                         ${expenses.map((expense, index) => `
                             <tr>
-                                <td>${escapeHTML(expense.name)}</td>
-                                <td>${escapeHTML(expense.category)}</td>
+                                <td>${highlightText(expense.name, searchQuery)}</td>
+                                <td><span class="editable" data-edit="category" data-id="${expense.id}">${highlightText(expense.category, searchQuery)}</span></td>
                                 <td>${(expense.currency || currentCurrency).toUpperCase()}</td>
                                 <td>${expense.source ? escapeHTML(expense.source) : '-'}</td>
                                 <td>${expense.source === 'TARJETA' ? escapeHTML(expense.card || '-') : '-'}</td>
                                 ${hasTags ? `<td class="tags-column">${(expense.tags || []).map(escapeHTML).join(', ')}</td>` : ''}
-                                <td class="amount">${formatCurrencyWithCurrency(expense.amount, expense.currency || currentCurrency)}</td>
+                                <td class="amount"><span class="editable" data-edit="amount" data-id="${expense.id}">${formatCurrencyWithCurrency(expense.amount, expense.currency || currentCurrency)}</span></td>
                                 <td class="date-column">${formatDateFromUTC(expense.date)}</td>
                                 <td>
                                     <button class="edit-button" onclick="editExpenseByIndex(${index})">
@@ -216,6 +225,13 @@
             expensesForTable = showAll
                 ? allExpenses.slice().sort((a, b) => new Date(b.date) - new Date(a.date))
                 : getMonthExpenses(allExpenses);
+
+            if (searchQuery) {
+                expensesForTable = expensesForTable.filter(exp => {
+                    const haystack = `${exp.name} ${exp.category} ${(exp.tags || []).join(' ')}`.toLowerCase();
+                    return haystack.includes(searchQuery.toLowerCase());
+                });
+            }
             
             const tableContainer = document.getElementById('tableContainer');
             tableContainer.innerHTML = createTable(expensesForTable);
@@ -362,6 +378,47 @@
                 cardGroup.style.display = 'none';
                 document.getElementById('cardInput').value = '';
             }
+            document.getElementById('cardError').textContent = '';
+        }
+
+        function highlightText(text, query) {
+            const safeText = escapeHTML(text || '');
+            if (!query) return safeText;
+            const regex = new RegExp(escapeRegex(query), 'gi');
+            return safeText.replace(regex, match => `<mark>${match}</mark>`);
+        }
+
+        async function updateExpenseInline(expenseId, updatedFields) {
+            const exp = allExpenses.find(e => e.id === expenseId);
+            if (!exp) return;
+            const payload = {
+                name: exp.name,
+                category: exp.category,
+                amount: exp.amount,
+                date: exp.date,
+                tags: exp.tags || [],
+                currency: exp.currency || currentCurrency,
+                source: exp.source || 'CA',
+                card: exp.card || '',
+                ...updatedFields,
+            };
+            try {
+                const response = await fetch(`/expense/edit?id=${expenseId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                if (!response.ok) {
+                    const error = await response.json();
+                    showToast(error.error || 'No se pudo actualizar', 'error');
+                    return;
+                }
+                showToast('Actualizado', 'success');
+                await initialize();
+            } catch (error) {
+                console.error('Error inline edit:', error);
+                showToast('No se pudo actualizar', 'error');
+            }
         }
 
         async function initialize() {
@@ -370,7 +427,8 @@
                 if (!configResponse.ok) throw new Error('No se pudo obtener la configuracion');
                 const config = await configResponse.json();
                 const categorySelect = document.getElementById('category');
-                categorySelect.innerHTML = config.categories.map(cat => 
+                categories = config.categories || [];
+                categorySelect.innerHTML = categories.map(cat => 
                     `<option value="${cat}">${cat}</option>`
                 ).join('');
                 currentCurrency = (config.currency || 'ars').toLowerCase();
@@ -476,6 +534,10 @@
                 amount *= -1;
             }
             const sourceValue = sourceSelect.value || 'CA';
+            if (sourceValue === 'TARJETA' && !document.getElementById('cardInput').value.trim()) {
+                document.getElementById('cardError').textContent = 'Especifica la tarjeta';
+                return;
+            }
 
             const formData = {
                 name: document.getElementById('name').value,
@@ -496,8 +558,9 @@
                 });
                 const messageDiv = document.getElementById('formMessage');
                 if (response.ok) {
-                    messageDiv.textContent = editId ? 'Gasto actualizado con exito!' : 'Gasto agregado con exito!';
-                    messageDiv.className = 'form-message success';
+                    messageDiv.textContent = '';
+                    messageDiv.className = 'form-message';
+                    showToast(editId ? 'Gasto actualizado con exito' : 'Gasto agregado con exito', 'success');
                     form.reset();
                     document.getElementById('selected-tags').innerHTML = '';
                     selectedTags.clear();
@@ -514,18 +577,13 @@
                     document.getElementById('date').value = `${year}-${month}-${day}`;
                 } else {
                     const error = await response.json();
-                    messageDiv.textContent = `Error: ${error.error || 'No se pudo guardar el gasto'}`;
-                    messageDiv.className = 'form-message error';
-                }
-                setTimeout(() => {
-                    messageDiv.textContent = "";
+                    messageDiv.textContent = '';
                     messageDiv.className = 'form-message';
-                }, 3000);
+                    showToast(error.error || 'No se pudo guardar el gasto', 'error');
+                }
             } catch (error) {
                 console.error('Error saving expense:', error);
-                const messageDiv = document.getElementById('formMessage');
-                messageDiv.textContent = 'Error: No se pudo guardar el gasto';
-                messageDiv.className = 'form-message error';
+                showToast('No se pudo guardar el gasto', 'error');
             }
         });
         document.addEventListener('DOMContentLoaded', initialize);
@@ -538,6 +596,68 @@
 
         sourceSelect.addEventListener('change', toggleCardInput);
         toggleCardInput();
+
+        document.getElementById('tableSearch').addEventListener('input', (e) => {
+            searchQuery = e.target.value.trim();
+            updateTable();
+        });
+
+        document.getElementById('clearSearch').addEventListener('click', () => {
+            searchQuery = '';
+            document.getElementById('tableSearch').value = '';
+            updateTable();
+        });
+
+        document.getElementById('tableContainer').addEventListener('click', (e) => {
+            const target = e.target.closest('.editable');
+            if (!target) return;
+            const field = target.dataset.edit;
+            const expenseId = target.dataset.id;
+            const exp = expensesForTable.find(item => item.id === expenseId);
+            if (!exp) return;
+
+            if (field === 'amount') {
+                const input = document.createElement('input');
+                input.type = 'number';
+                input.step = '0.01';
+                input.min = '0.01';
+                input.value = Math.abs(exp.amount);
+                input.style.width = '100%';
+                target.replaceWith(input);
+                input.focus();
+                input.addEventListener('blur', async () => {
+                    const value = parseFloat(input.value);
+                    if (Number.isNaN(value) || value <= 0) {
+                        updateTable();
+                        return;
+                    }
+                    const signed = exp.amount < 0 ? -value : value;
+                    await updateExpenseInline(expenseId, { amount: signed });
+                });
+            }
+
+            if (field === 'category') {
+                const select = document.createElement('select');
+                categories.forEach(cat => {
+                    const option = document.createElement('option');
+                    option.value = cat;
+                    option.textContent = cat;
+                    if (cat === exp.category) option.selected = true;
+                    select.appendChild(option);
+                });
+                select.style.width = '100%';
+                target.replaceWith(select);
+                select.focus();
+                select.addEventListener('blur', async () => {
+                    const value = select.value;
+                    if (!value) {
+                        updateTable();
+                        return;
+                    }
+                    await updateExpenseInline(expenseId, { category: value });
+                });
+            }
+        });
         
         window.editExpenseByIndex = editExpenseByIndex;
     </script>

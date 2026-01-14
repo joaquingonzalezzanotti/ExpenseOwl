@@ -58,7 +58,14 @@
 
         <div class="table-controls">
             <button id="toggleExpenseFormBtn" class="nav-button"><i class="fa-solid fa-plus"></i> Agregar gasto</button>
+            <div class="quick-actions">
+                <button class="quick-action" data-action="income">Ingreso</button>
+                <button class="quick-action" data-action="expense">Gasto</button>
+                <button class="quick-action" data-action="card-expense">Gasto con Tarjeta</button>
+            </div>
         </div>
+
+        <div id="panelSummary" class="panel-summary"></div>
 
         <div id="addExpenseContainer" style="display: none;">
             <div class="form-container">
@@ -106,6 +113,7 @@
                     <div class="form-group" id="cardGroup" style="display:none;">
                         <label for="cardInput">Tarjeta</label>
                         <input type="text" id="cardInput" placeholder="Ej: Visa, Amex">
+                        <div id="cardError" class="form-error"></div>
                     </div>
 
                     <div class="form-group">
@@ -132,8 +140,27 @@
             </div>
         </div>
 
+        <div class="panel-filters">
+            <div class="filter-group">
+                <span class="filter-label">Moneda</span>
+                <select id="filterCurrency">
+                    <option value="all">Todas</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <span class="filter-label">Categoria</span>
+                <select id="filterCategory">
+                    <option value="all">Todas</option>
+                </select>
+            </div>
+            <button id="clearFilters" class="nav-button">Limpiar</button>
+            <span id="baseCurrencyIndicator" class="panel-indicator"></span>
+        </div>
+
         <div class="chart-container">
-            <div id="noDataMessage" class="no-data" style="display: none; width: 100%;">No hay gastos registrados este mes.</div>
+            <div id="noDataMessage" class="empty-state" style="display: none;">
+                <strong>Aun no hay gastos.</strong> Carga el primero con + Agregar gasto.
+            </div>
             <div class="chart-box">
                 <canvas id="categoryPieChart"></canvas>
             </div>
@@ -141,8 +168,14 @@
             </div>
         </div>
 
+        <div id="recentMovements" class="recent-movements" style="display: none;">
+            <h3>Ultimos 3 movimientos</h3>
+            <div id="recentList" class="recent-list"></div>
+        </div>
+
         <div id="cashflow-section" class="cashflow-container"></div>
     </div>
+    <div id="toastContainer" class="toast-container"></div>
 
     <script src="/functions.js"></script>
     <script>
@@ -159,6 +192,9 @@
         const supportedCurrencies = Object.keys(currencyBehaviors);
         const sourceSelect = document.getElementById('sourceSelect');
         const cardGroup = document.getElementById('cardGroup');
+        let filterCurrency = 'all';
+        let filterCategory = 'all';
+        let categories = [];
 
         function formatCurrencyWithCurrency(amount, currencyCode) {
             const behavior = currencyBehaviors[currencyCode] || currencyBehaviors[currentCurrency] || {symbol:"$",useComma:false,useDecimals:true,useSpace:false,right:false};
@@ -213,22 +249,27 @@
         }
 
         function updateChartAndLegend() {
-            const monthExpenses = getMonthExpenses(allExpenses);
+            const monthExpenses = getFilteredMonthExpenses();
+            const chartContainer = document.querySelector('.chart-container');
             const chartBox = document.querySelector('.chart-box');
             const legendBox = document.getElementById('customLegend');
             const cashflowSection = document.getElementById('cashflow-section');
             const noDataMessage = document.getElementById('noDataMessage');
 
-            const hasExpenses = monthExpenses.length > 0;
-            if (!hasExpenses) {
+            const hasTransactions = monthExpenses.length > 0;
+            if (!hasTransactions) {
                 if (pieChart) {
                     pieChart.destroy();
                     pieChart = null;
                 }
+                chartContainer.style.display = 'flex';
                 chartBox.style.display = 'none';
                 legendBox.style.display = 'none';
                 cashflowSection.style.display = 'none';
                 noDataMessage.style.display = 'block';
+                noDataMessage.innerHTML = '<strong>Aun no hay gastos.</strong> Carga el primero con + Agregar gasto.';
+                renderBaseSummary([]);
+                renderRecentMovements([]);
                 return;
             }
 
@@ -236,14 +277,20 @@
             renderCashflowByCurrency(monthExpenses);
             cashflowSection.style.display = 'flex';
             noDataMessage.style.display = 'none';
+            renderBaseSummary(monthExpenses);
+            renderRecentMovements(monthExpenses);
 
             // Grafico solo para moneda base y gastos
             const filteredForChart = monthExpenses.filter(e => e.currency === baseCurrency && e.amount < 0);
             if (filteredForChart.length === 0) {
                 if (pieChart) { pieChart.destroy(); pieChart = null; }
+                chartContainer.style.display = 'flex';
                 chartBox.style.display = 'none';
                 legendBox.style.display = 'none';
+                noDataMessage.style.display = 'block';
+                noDataMessage.innerHTML = `<strong>No hay gastos en ${baseCurrency.toUpperCase()}.</strong> Carga el primero con + Agregar gasto.`;
             } else {
+                chartContainer.style.display = 'flex';
                 chartBox.style.display = 'flex';
                 legendBox.style.display = 'flex';
                 const categoryData = calculateCategoryBreakdown(filteredForChart);
@@ -306,6 +353,48 @@
                 `;
                 container.appendChild(row);
             });
+        }
+
+        function renderBaseSummary(expenses) {
+            const panel = document.getElementById('panelSummary');
+            panel.innerHTML = '';
+            const baseExpenses = expenses.filter(e => (e.currency || baseCurrency) === baseCurrency);
+            const income = baseExpenses.filter(e => e.amount > 0).reduce((sum, e) => sum + e.amount, 0);
+            const expense = baseExpenses.filter(e => e.amount < 0).reduce((sum, e) => sum + Math.abs(e.amount), 0);
+            const balance = income - expense;
+            panel.innerHTML = `
+                <div class="summary-card">
+                    <div class="summary-title">Ingresos ${baseCurrency.toUpperCase()}</div>
+                    <div class="summary-value">${formatCurrencyWithCurrency(income, baseCurrency)}</div>
+                </div>
+                <div class="summary-card">
+                    <div class="summary-title">Gastos ${baseCurrency.toUpperCase()}</div>
+                    <div class="summary-value">${formatCurrencyWithCurrency(expense, baseCurrency)}</div>
+                </div>
+                <div class="summary-card">
+                    <div class="summary-title">Balance ${baseCurrency.toUpperCase()}</div>
+                    <div class="summary-value ${balance >= 0 ? 'positive' : 'negative'}">${formatCurrencyWithCurrency(balance, baseCurrency)}</div>
+                </div>
+            `;
+        }
+
+        function renderRecentMovements(expenses) {
+            const container = document.getElementById('recentMovements');
+            const list = document.getElementById('recentList');
+            const sorted = expenses.slice().sort((a, b) => new Date(b.date) - new Date(a.date));
+            const recent = sorted.slice(0, 3);
+            if (recent.length === 0) {
+                container.style.display = 'none';
+                list.innerHTML = '';
+                return;
+            }
+            container.style.display = 'block';
+            list.innerHTML = recent.map(item => `
+                <div class="recent-item">
+                    <span><strong>${escapeHTML(item.name)}</strong> • ${escapeHTML(item.category)}</span>
+                    <span>${formatCurrencyWithCurrency(item.amount, item.currency || baseCurrency)}</span>
+                </div>
+            `).join('');
         }
 
         function createPieChart(categoryData) {
@@ -409,7 +498,8 @@
                 if (!configResponse.ok) throw new Error('No se pudo obtener la configuracion');
                 const config = await configResponse.json();
                 const categorySelect = document.getElementById('category');
-                categorySelect.innerHTML = config.categories.map(cat => 
+                categories = config.categories || [];
+                categorySelect.innerHTML = categories.map(cat => 
                     `<option value="${cat}">${cat}</option>`
                 ).join('');
                 currentCurrency = (config.currency || 'ars').toLowerCase();
@@ -419,7 +509,8 @@
                 baseCurrency = currentCurrency;
                 populateFormCurrency();
                 startDate = config.startDate;
-                
+                populateFilters();
+
                 const response = await fetch('/expenses');
                 if (!response.ok) throw new Error('No se pudieron obtener los datos');
                 const data = await response.json();
@@ -443,6 +534,7 @@
                 updateMonthDisplay();
                 updateChartAndLegend();
                 setupTagInput();
+                updateIndicator();
             } catch (error) {
                 console.error('No se pudo inicializar el panel:', error);
             }
@@ -564,6 +656,27 @@
             select.innerHTML = supportedCurrencies.map(code => `<option value="${code}" ${code === currentCurrency ? 'selected' : ''}>${code.toUpperCase()}</option>`).join('');
         }
 
+        function populateFilters() {
+            const currencySelect = document.getElementById('filterCurrency');
+            currencySelect.innerHTML = `<option value="all">Todas</option>` + supportedCurrencies.map(code => `<option value="${code}">${code.toUpperCase()}</option>`).join('');
+            const categorySelect = document.getElementById('filterCategory');
+            categorySelect.innerHTML = `<option value="all">Todas</option>` + categories.map(cat => `<option value="${cat}">${cat}</option>`).join('');
+        }
+
+        function updateIndicator() {
+            const indicator = document.getElementById('baseCurrencyIndicator');
+            indicator.textContent = `Moneda base: ${baseCurrency.toUpperCase()} · El grafico muestra solo gastos en ${baseCurrency.toUpperCase()}`;
+        }
+
+        function getFilteredMonthExpenses() {
+            const monthExpenses = getMonthExpenses(allExpenses);
+            return monthExpenses.filter(exp => {
+                const currencyMatch = filterCurrency === 'all' || (exp.currency || baseCurrency) === filterCurrency;
+                const categoryMatch = filterCategory === 'all' || exp.category === filterCategory;
+                return currencyMatch && categoryMatch;
+            });
+        }
+
         function toggleCardInput() {
             const source = sourceSelect.value;
             if (source === 'TARJETA') {
@@ -572,6 +685,7 @@
                 cardGroup.style.display = 'none';
                 document.getElementById('cardInput').value = '';
             }
+            document.getElementById('cardError').textContent = '';
         }
 
         document.getElementById('expenseForm').addEventListener('submit', async (e) => {
@@ -582,6 +696,10 @@
                 amount *= -1;
             }
             const sourceValue = sourceSelect.value || 'CA';
+            if (sourceValue === 'TARJETA' && !document.getElementById('cardInput').value.trim()) {
+                document.getElementById('cardError').textContent = 'Especifica la tarjeta';
+                return;
+            }
             const formData = {
                 name: document.getElementById('name').value,
                 category: document.getElementById('category').value,
@@ -600,8 +718,9 @@
                 });
                 const messageDiv = document.getElementById('formMessage');
                 if (response.ok) {
-                messageDiv.textContent = 'Gasto agregado con exito!';
-                messageDiv.className = 'form-message success';
+                messageDiv.textContent = '';
+                messageDiv.className = 'form-message';
+                showToast('Gasto agregado con exito', 'success');
                 document.getElementById('expenseForm').reset();
                 document.getElementById('selected-tags').innerHTML = '';
                 selectedTags.clear();
@@ -616,18 +735,13 @@
                     document.getElementById('date').value = `${year}-${month}-${day}`;
                 } else {
                     const error = await response.json();
-                    messageDiv.textContent = `Error: ${error.error || 'No se pudo agregar el gasto'}`;
-                    messageDiv.className = 'form-message error';
-                }
-                setTimeout(() => {
                     messageDiv.textContent = '';
                     messageDiv.className = 'form-message';
-                }, 3000);
+                    showToast(error.error || 'No se pudo agregar el gasto', 'error');
+                }
             } catch (error) {
                 console.error('Error adding expense:', error);
-                const messageDiv = document.getElementById('formMessage');
-                messageDiv.textContent = 'Error: No se pudo agregar el gasto';
-                messageDiv.className = 'form-message error';
+                showToast('No se pudo agregar el gasto', 'error');
             }
         });
         document.addEventListener('DOMContentLoaded', initialize);
@@ -640,6 +754,45 @@
 
         sourceSelect.addEventListener('change', toggleCardInput);
         toggleCardInput();
+
+        document.getElementById('filterCurrency').addEventListener('change', (e) => {
+            filterCurrency = e.target.value;
+            updateChartAndLegend();
+        });
+
+        document.getElementById('filterCategory').addEventListener('change', (e) => {
+            filterCategory = e.target.value;
+            updateChartAndLegend();
+        });
+
+        document.getElementById('clearFilters').addEventListener('click', () => {
+            filterCurrency = 'all';
+            filterCategory = 'all';
+            document.getElementById('filterCurrency').value = 'all';
+            document.getElementById('filterCategory').value = 'all';
+            updateChartAndLegend();
+        });
+
+        document.querySelectorAll('.quick-action').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const formContainer = document.getElementById('addExpenseContainer');
+                formContainer.style.display = 'block';
+                document.getElementById('toggleExpenseFormBtn').innerHTML = '<i class="fa-solid fa-times"></i> Close';
+                const action = btn.dataset.action;
+                if (action === 'income') {
+                    document.getElementById('reportGain').checked = true;
+                    sourceSelect.value = 'CA';
+                } else if (action === 'expense') {
+                    document.getElementById('reportGain').checked = false;
+                    sourceSelect.value = 'CA';
+                } else if (action === 'card-expense') {
+                    document.getElementById('reportGain').checked = false;
+                    sourceSelect.value = 'TARJETA';
+                }
+                toggleCardInput();
+                document.getElementById('amount').focus();
+            });
+        });
     </script>
 </body>
 </html>
