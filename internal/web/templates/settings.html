@@ -16,14 +16,14 @@
             }
         })();
     </script>
-    <title>Configuracion ExpenseOwl</title>
+    <title>Configuracion ExpenseLog</title>
 </head>
 <body>
     <div class="container">
         <header>
             <div class="nav-bar">
                 <a href="/">
-                    <img src="/pwa/icon-192.png" alt="ExpenseOwl Logo" height="85" style="vertical-align: middle; margin-right: 20px;">
+                    <img src="/pwa/icon-192.png" alt="ExpenseLog Logo" height="85" style="vertical-align: middle; margin-right: 20px;">
                 </a>
                 <a href="/" class="view-button" data-tooltip="Panel">
                     <i class="fa-solid fa-chart-pie"></i>
@@ -103,7 +103,7 @@
                         <input type="file" id="csv-import-file" accept=".csv" style="display: none;">
                     </div>
                     <div class="import-option">
-                        <label for="csv-import-file-old" class="nav-button">Importar desde ExpenseOwl v3.20-</label>
+                        <label for="csv-import-file-old" class="nav-button">Importar desde ExpenseLog v3.20-</label>
                         <input type="file" id="csv-import-file-old" accept=".csv" style="display: none;">
                     </div>
                 </div>
@@ -311,19 +311,19 @@ function sanitizeCategoryName(raw) {
     return raw.trim().replace(/[<>]/g, ' ').trim();
 }
 
-        function addCategory() {
-            const input = document.getElementById('newCategory');
-            const category = sanitizeCategoryName(input.value);
-            const exists = categoriesLower.has(category.toLowerCase());
-            if (category && !exists) {
-                const updated = [...categories, category];
-                saveCategoriesList(updated, true).then((ok) => {
-                    if (ok) {
-                        categories = updated;
-                        renderCategories();
-                        input.value = '';
-                    }
-                });
+function addCategory() {
+    const input = document.getElementById('newCategory');
+    const category = sanitizeCategoryName(input.value);
+    const exists = categoriesLower.has(category.toLowerCase());
+    if (category && !exists) {
+        const updated = [...categories, category];
+        saveCategoriesList(updated).then((ok) => {
+            if (ok) {
+                categories = updated;
+                renderCategories();
+                input.value = '';
+            }
+        });
     } else if (exists) {
         showMessage('categoriesMessage', 'La categoria ya existe', false);
     } else if (!category) {
@@ -331,22 +331,22 @@ function sanitizeCategoryName(raw) {
     }
 }
 
-        function removeCategory(index) {
-            const removed = categories[index];
-            if (!removed) return;
-            if (!confirm(`Eliminar la categoria "${removed}"?`)) return;
-            const updated = categories.filter((_, i) => i !== index);
-            if (updated.length === 0) {
-                showMessage('categoriesMessage', 'Se requiere al menos una categoria', false);
-                return;
-            }
-            saveCategoriesList(updated, false).then((ok) => {
-                if (ok) {
-                    categories = updated;
-                    renderCategories();
-                }
-            });
+function removeCategory(index) {
+    const removed = categories[index];
+    if (!removed) return;
+    if (!confirm(`Eliminar la categoria "${removed}"?`)) return;
+    const updated = categories.filter((_, i) => i !== index);
+    if (updated.length === 0) {
+        showMessage('categoriesMessage', 'Se requiere al menos una categoria', false);
+        return;
+    }
+    saveCategoriesList(updated).then((ok) => {
+        if (ok) {
+            categories = updated;
+            renderCategories();
         }
+    });
+}
 
 function startEditCategory(index) {
     const list = document.getElementById('categories-list');
@@ -375,50 +375,35 @@ function cancelEditCategory() {
     renderCategories();
 }
 
-        function saveEditCategory(index, value) {
-            const name = sanitizeCategoryName(value);
-            if (!name) {
-                showMessage('categoriesMessage', 'El nombre de la categoria no puede estar vacio.', false);
-                return;
-            }
-            const lower = name.toLowerCase();
-            const exists = categoriesLower.has(lower) && categories[index].toLowerCase() !== lower;
-            if (exists) {
-                showMessage('categoriesMessage', 'La categoria ya existe', false);
-                return;
-            }
-            const updated = categories.slice();
-            updated[index] = name;
-            saveCategoriesList(updated, true).then((ok) => {
-                if (ok) {
-                    categories = updated;
-                    renderCategories();
-                }
-            });
+function saveEditCategory(index, value) {
+    const name = sanitizeCategoryName(value);
+    if (!name) {
+        showMessage('categoriesMessage', 'El nombre de la categoria no puede estar vacio.', false);
+        return;
+    }
+    const lower = name.toLowerCase();
+    const exists = categoriesLower.has(lower) && categories[index].toLowerCase() !== lower;
+    if (exists) {
+        showMessage('categoriesMessage', 'La categoria ya existe', false);
+        return;
+    }
+    const updated = categories.slice();
+    updated[index] = name;
+    saveCategoriesList(updated).then((ok) => {
+        if (ok) {
+            categories = updated;
+            renderCategories();
         }
+    });
+}
 
-        async function saveCategoriesList(nextCategories, allowMerge) {
-            try {
-                let payload = nextCategories.slice();
-                if (allowMerge) {
-                    const existingResponse = await fetch('/categories');
-                    if (existingResponse.ok) {
-                        const existing = await existingResponse.json();
-                        const mergedLower = new Set(payload.map(c => c.toLowerCase()));
-                        (existing || []).forEach((cat) => {
-                            const lower = String(cat).toLowerCase();
-                            if (!mergedLower.has(lower)) {
-                                payload.push(cat);
-                                mergedLower.add(lower);
-                            }
-                        });
-                    }
-                }
-                const response = await fetch('/categories/edit', {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
+async function saveCategoriesList(nextCategories) {
+    try {
+        const response = await fetch('/categories/edit', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(nextCategories)
+        });
         if (response.ok) {
             showMessage('categoriesMessage', 'Categorias guardadas con exito', true);
             return true;
