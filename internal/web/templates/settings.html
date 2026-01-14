@@ -789,7 +789,22 @@
                     categories = await categoriesResponse.json();
                 }
                 if (!categories || categories.length === 0) {
-                    categories = [...(config.categories || [])];
+                    const fallback = [...(config.categories || [])];
+                    if (fallback.length > 0) {
+                        await fetch('/categories/edit', {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(fallback)
+                        });
+                        const retry = await fetch('/categories');
+                        if (retry.ok) {
+                            categories = await retry.json();
+                        } else {
+                            categories = fallback;
+                        }
+                    } else {
+                        categories = fallback;
+                    }
                 }
                 removedCategoriesLower.clear();
                 currentCurrency = config.currency;
