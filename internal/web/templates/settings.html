@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="/favicon.ico" type="image/x-icon">
     <link rel="stylesheet" href="/fa.min.css">
     <link rel="stylesheet" href="/style.css">
     <script>
@@ -242,6 +243,7 @@
     <script src="/functions.js"></script>
     <script>
         let categories = [];
+        let categoriesLower = new Set();
         let allTags = new Set();
         let addFormSelectedTags = new Set();
         let editFormSelectedTags = new Set();
@@ -263,9 +265,14 @@
         }
 
         // --- Category Management ---
+        function syncCategoriesLower() {
+            categoriesLower = new Set(categories.map(c => c.toLowerCase()));
+        }
+
         function renderCategories() {
             const list = document.getElementById('categories-list');
             list.innerHTML = '';
+            syncCategoriesLower();
             categories.forEach((category, index) => {
                 const item = document.createElement('div');
                 item.className = 'category-item';
@@ -344,15 +351,19 @@
             return false;
         }
 
+        function sanitizeCategoryName(raw) {
+            return raw.trim().replace(/[<>]/g, ' ').trim();
+        }
+
         function addCategory() {
             const input = document.getElementById('newCategory');
-            let category = input.value.trim();
-            category = category.replace(/[<>]/g, ' ').trim();
-            if (category && !categories.includes(category)) {
+            const category = sanitizeCategoryName(input.value);
+            const exists = categoriesLower.has(category.toLowerCase());
+            if (category && !exists) {
                 categories.push(category);
                 renderCategories();
                 input.value = '';
-            } else if (categories.includes(category)) {
+            } else if (exists) {
                 showMessage('categoriesMessage', 'La categoria ya existe', false);
             } else if (!category) {
                 showMessage('categoriesMessage', 'El nombre de la categoria no puede estar vacio.', false);
@@ -362,6 +373,9 @@
         function removeCategory(index) {
             categories.splice(index, 1);
             renderCategories();
+            if (categories.length === 0) {
+                showMessage('categoriesMessage', 'Se requiere al menos una categoria', false);
+            }
         }
 
         async function saveCategories() {
@@ -377,6 +391,7 @@
                 });   
                 if (response.ok) {
                     showMessage('categoriesMessage', 'Categorias guardadas con exito', true);
+                    await initialize();
                 } else {
                     const error = await response.json();
                     showMessage('categoriesMessage', `No se pudieron guardar las categorias: ${error.error}`, false);

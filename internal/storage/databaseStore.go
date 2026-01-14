@@ -54,6 +54,14 @@ const (
 		currency VARCHAR(255) NOT NULL,
 		start_date INTEGER NOT NULL
 	);`
+
+	createCategoriesTableSQL = `
+	CREATE TABLE IF NOT EXISTS categories (
+		id SERIAL PRIMARY KEY,
+		name TEXT NOT NULL UNIQUE,
+		position INTEGER NOT NULL,
+		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+	);`
 )
 
 func InitializePostgresStore(baseConfig SystemConfig) (Storage, error) {
@@ -70,6 +78,9 @@ func InitializePostgresStore(baseConfig SystemConfig) (Storage, error) {
 	if err := createTables(db); err != nil {
 		return nil, fmt.Errorf("failed to create database tables: %v", err)
 	}
+	if err := ensureCategoriesTable(db); err != nil {
+		return nil, fmt.Errorf("failed to seed categories table: %v", err)
+	}
 	return &databaseStore{db: db, defaults: map[string]string{}}, nil
 }
 
@@ -78,7 +89,7 @@ func makeDBURL(baseConfig SystemConfig) string {
 }
 
 func createTables(db *sql.DB) error {
-	for _, query := range []string{createExpensesTableSQL, createRecurringExpensesTableSQL, createConfigTableSQL} {
+	for _, query := range []string{createExpensesTableSQL, createRecurringExpensesTableSQL, createConfigTableSQL, createCategoriesTableSQL} {
 		if _, err := db.Exec(query); err != nil {
 			return err
 		}
@@ -94,6 +105,52 @@ func createTables(db *sql.DB) error {
 		}
 	}
 	return nil
+}
+
+func ensureCategoriesTable(db *sql.DB) error {
+	var count int
+	if err := db.QueryRow(`SELECT COUNT(1) FROM categories`).Scan(&count); err != nil {
+		return err
+	}
+	if count > 0 {
+		return nil
+	}
+
+	var categories []string
+	var categoriesStr string
+	err := db.QueryRow(`SELECT categories FROM config WHERE id = 'default'`).Scan(&categoriesStr)
+	if err == nil {
+		if unmarshalErr := json.Unmarshal([]byte(categoriesStr), &categories); unmarshalErr != nil {
+			categories = nil
+		}
+	}
+	if len(categories) == 0 {
+		categories = defaultCategories
+	}
+	return seedCategories(db, categories)
+}
+
+func seedCategories(db *sql.DB, categories []string) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	for i, name := range categories {
+		if _, err = tx.Exec(
+			`INSERT INTO categories (name, position) VALUES ($1, $2)
+			 ON CONFLICT (name) DO UPDATE SET position = EXCLUDED.position`,
+			name, i+1,
+		); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 func (s *databaseStore) Close() error {
@@ -131,10 +188,10 @@ func (s *databaseStore) updateConfig(updater func(c *Config) error) error {
 }
 
 func (s *databaseStore) GetConfig() (*Config, error) {
-	query := `SELECT categories, currency, start_date FROM config WHERE id = 'default'`
-	var categoriesStr, currency string
+	query := `SELECT currency, start_date FROM config WHERE id = 'default'`
+	var currency string
 	var startDate int
-	err := s.db.QueryRow(query).Scan(&categoriesStr, &currency, &startDate)
+	err := s.db.QueryRow(query).Scan(&currency, &startDate)
 
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -151,9 +208,17 @@ func (s *databaseStore) GetConfig() (*Config, error) {
 	var config Config
 	config.Currency = currency
 	config.StartDate = startDate
-	if err := json.Unmarshal([]byte(categoriesStr), &config.Categories); err != nil {
-		return nil, fmt.Errorf("failed to parse categories from db: %v", err)
+	categories, err := s.getCategoriesFromTable()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get categories from db: %v", err)
 	}
+	if len(categories) == 0 {
+		categories = defaultCategories
+		if seedErr := seedCategories(s.db, categories); seedErr != nil {
+			return nil, fmt.Errorf("failed to seed categories: %v", seedErr)
+		}
+	}
+	config.Categories = categories
 
 	recurring, err := s.GetRecurringExpenses()
 	if err != nil {
@@ -165,18 +230,78 @@ func (s *databaseStore) GetConfig() (*Config, error) {
 }
 
 func (s *databaseStore) GetCategories() ([]string, error) {
-	config, err := s.GetConfig()
+	categories, err := s.getCategoriesFromTable()
 	if err != nil {
 		return nil, err
 	}
-	return config.Categories, nil
+	if len(categories) == 0 {
+		categories = defaultCategories
+		if seedErr := seedCategories(s.db, categories); seedErr != nil {
+			return nil, seedErr
+		}
+	}
+	return categories, nil
 }
 
 func (s *databaseStore) UpdateCategories(categories []string) error {
+	if err := s.updateCategoriesTable(categories); err != nil {
+		return err
+	}
 	return s.updateConfig(func(c *Config) error {
 		c.Categories = categories
 		return nil
 	})
+}
+
+func (s *databaseStore) getCategoriesFromTable() ([]string, error) {
+	rows, err := s.db.Query(`SELECT name FROM categories ORDER BY position ASC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var categories []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		categories = append(categories, name)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return categories, nil
+}
+
+func (s *databaseStore) updateCategoriesTable(categories []string) error {
+	if len(categories) == 0 {
+		return fmt.Errorf("categories cannot be empty")
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	for i, name := range categories {
+		if _, err = tx.Exec(
+			`INSERT INTO categories (name, position) VALUES ($1, $2)
+			 ON CONFLICT (name) DO UPDATE SET position = EXCLUDED.position`,
+			name, i+1,
+		); err != nil {
+			return err
+		}
+	}
+	if _, err = tx.Exec(`DELETE FROM categories WHERE NOT (name = ANY($1))`, pq.Array(categories)); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *databaseStore) GetCurrency() (string, error) {

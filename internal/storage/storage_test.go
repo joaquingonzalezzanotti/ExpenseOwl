@@ -3,69 +3,9 @@ package storage
 import (
 	"net/url"
 	"os"
-	"path/filepath"
 	"testing"
 	"time"
 )
-
-func TestJSONStoreCRUD(t *testing.T) {
-	tmpDir := t.TempDir()
-	baseConfig := SystemConfig{
-		StorageURL:  filepath.Join(tmpDir, "data"),
-		StorageType: BackendTypeJSON,
-	}
-
-	store, err := InitializeJsonStore(baseConfig)
-	if err != nil {
-		t.Fatalf("failed to init json store: %v", err)
-	}
-	t.Cleanup(func() { _ = store.Close() })
-
-	expense := Expense{
-		Name:     "Prueba",
-		Category: "Test",
-		Amount:   -100.50,
-		Currency: "ars",
-		Date:     time.Now(),
-	}
-
-	if err := store.AddExpense(expense); err != nil {
-		t.Fatalf("add expense: %v", err)
-	}
-
-	all, err := store.GetAllExpenses()
-	if err != nil {
-		t.Fatalf("get all: %v", err)
-	}
-	if len(all) != 1 {
-		t.Fatalf("expected 1 expense, got %d", len(all))
-	}
-
-	saved := all[0]
-	saved.Amount = -200
-	if err := store.UpdateExpense(saved.ID, saved); err != nil {
-		t.Fatalf("update expense: %v", err)
-	}
-
-	updated, err := store.GetExpense(saved.ID)
-	if err != nil {
-		t.Fatalf("get expense after update: %v", err)
-	}
-	if updated.Amount != -200 {
-		t.Fatalf("expected updated amount -200, got %f", updated.Amount)
-	}
-
-	if err := store.RemoveExpense(saved.ID); err != nil {
-		t.Fatalf("remove expense: %v", err)
-	}
-	finalList, err := store.GetAllExpenses()
-	if err != nil {
-		t.Fatalf("get all after delete: %v", err)
-	}
-	if len(finalList) != 0 {
-		t.Fatalf("expected empty store after delete, got %d", len(finalList))
-	}
-}
 
 func TestPostgresStoreCRUD(t *testing.T) {
 	uri := os.Getenv("TEST_DATABASE_URL")

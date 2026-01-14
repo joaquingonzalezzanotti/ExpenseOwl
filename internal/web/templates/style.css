@@ -255,8 +255,14 @@ header {
     }
 }
 
+#tableContainer {
+    margin-top: 1rem;
+    overflow-x: auto;
+}
+
 .expense-table {
     width: 100%;
+    min-width: 720px;
     border-collapse: collapse;
     background-color: var(--bg-secondary);
     border-radius: 8px;
@@ -719,6 +725,14 @@ header {
     .expense-table th,
     .expense-table td {
         padding: 0.75rem;
+    }
+
+    #tableContainer {
+        overflow-x: auto;
+    }
+
+    .expense-table {
+        min-width: 640px;
     }
 
     .container {

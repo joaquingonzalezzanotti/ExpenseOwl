@@ -68,6 +68,7 @@ type RecurringExpense struct {
 type BackendType string
 
 const (
+	// BackendTypeJSON is deprecated and no longer supported at runtime.
 	BackendTypeJSON     BackendType = "json"
 	BackendTypePostgres BackendType = "postgres"
 )
@@ -118,14 +119,11 @@ func backendTypeFromEnv(env string) BackendType {
 	case "postgres":
 		return BackendTypePostgres
 	default:
-		return BackendTypeJSON
+		return ""
 	}
 }
 
 func backendURLFromEnv(env string) string {
-	if env == "" {
-		return "data"
-	}
 	return env
 }
 
@@ -142,13 +140,22 @@ func backendSSLFromEnv(env string) string {
 func InitializeStorage() (Storage, error) {
 	baseConfig := SystemConfig{}
 	baseConfig.SetStorageConfig()
-	switch baseConfig.StorageType {
-	case BackendTypeJSON:
-		return InitializeJsonStore(baseConfig)
-	case BackendTypePostgres:
-		return InitializePostgresStore(baseConfig)
+	if baseConfig.StorageType == "" {
+		return nil, fmt.Errorf("missing STORAGE_TYPE (set STORAGE_TYPE=postgres)")
 	}
-	return nil, fmt.Errorf("invalid data store: %s", baseConfig.StorageType)
+	if baseConfig.StorageType != BackendTypePostgres {
+		return nil, fmt.Errorf("unsupported storage type: %q (json storage deprecated; set STORAGE_TYPE=postgres)", baseConfig.StorageType)
+	}
+	if baseConfig.StorageURL == "" {
+		return nil, fmt.Errorf("missing STORAGE_URL for postgres backend")
+	}
+	if baseConfig.StorageUser == "" {
+		return nil, fmt.Errorf("missing STORAGE_USER for postgres backend")
+	}
+	if baseConfig.StoragePass == "" {
+		return nil, fmt.Errorf("missing STORAGE_PASS for postgres backend")
+	}
+	return InitializePostgresStore(baseConfig)
 }
 
 var REInvalidChars *regexp.Regexp = regexp.MustCompile(`[^\p{L}\p{N}\s.,\-'_!"]`)
