@@ -250,6 +250,7 @@
     <script>
         let categories = [];
         let categoriesLower = new Set();
+        let removedCategoriesLower = new Set();
         let allTags = new Set();
         let addFormSelectedTags = new Set();
         let editFormSelectedTags = new Set();
@@ -376,6 +377,7 @@
             const exists = categoriesLower.has(category.toLowerCase());
             if (category && !exists) {
                 categories.push(category);
+                removedCategoriesLower.delete(category.toLowerCase());
                 renderCategories();
                 input.value = '';
             } else if (exists) {
@@ -386,6 +388,9 @@
         }
 
         function removeCategory(index) {
+            if (categories[index]) {
+                removedCategoriesLower.add(categories[index].toLowerCase());
+            }
             categories.splice(index, 1);
             renderCategories();
             if (categories.length === 0) {
@@ -399,13 +404,27 @@
                 return;
             }
             try {
+                let merged = [...categories];
+                const existingResponse = await fetch('/categories');
+                if (existingResponse.ok) {
+                    const existing = await existingResponse.json();
+                    const mergedLower = new Set(merged.map(c => c.toLowerCase()));
+                    (existing || []).forEach((cat) => {
+                        const lower = String(cat).toLowerCase();
+                        if (!mergedLower.has(lower) && !removedCategoriesLower.has(lower)) {
+                            merged.push(cat);
+                            mergedLower.add(lower);
+                        }
+                    });
+                }
                 const response = await fetch('/categories/edit', {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(categories)
+                    body: JSON.stringify(merged)
                 });   
                 if (response.ok) {
                     showMessage('categoriesMessage', 'Categorias guardadas con exito', true);
+                    removedCategoriesLower.clear();
                     await initialize();
                 } else {
                     const error = await response.json();
@@ -772,6 +791,7 @@
                 if (!categories || categories.length === 0) {
                     categories = [...(config.categories || [])];
                 }
+                removedCategoriesLower.clear();
                 currentCurrency = config.currency;
                 currentStartDate = config.startDate;
                 allTags.clear();
