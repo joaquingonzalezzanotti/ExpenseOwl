@@ -156,6 +156,7 @@
                 </select>
             </div>
             <button id="clearFilters" class="nav-button">Limpiar</button>
+            <button id="toggleChart" class="nav-button" style="display: none;">Ver grafico</button>
             <span id="baseCurrencyIndicator" class="panel-indicator"></span>
         </div>
 
@@ -199,6 +200,7 @@
         let filterCurrency = 'all';
         let filterCategory = 'all';
         let categories = [];
+        let chartExpanded = false;
 
         function formatCurrencyWithCurrency(amount, currencyCode) {
             const behavior = currencyBehaviors[currencyCode] || currencyBehaviors[currentCurrency] || {symbol:"$",useComma:false,useDecimals:true,useSpace:false,right:false};
@@ -263,6 +265,7 @@
             const filtersRow = document.querySelector('.panel-filters');
             const emptyStateBanner = document.getElementById('emptyStateBanner');
             const baseSummary = document.getElementById('baseSummary');
+            const toggleChart = document.getElementById('toggleChart');
 
             const hasTransactions = monthExpensesAll.length > 0;
             const hasBaseExpenses = monthExpensesAll.some(e => (e.currency || baseCurrency) === baseCurrency && e.amount < 0);
@@ -291,6 +294,8 @@
             emptyStateBanner.style.display = 'none';
             renderRecentMovements(monthExpenses);
             filtersRow.style.display = hasBaseExpenses ? 'flex' : 'none';
+            toggleChart.style.display = hasBaseExpenses ? 'inline-flex' : 'none';
+            toggleChart.textContent = chartExpanded ? 'Ocultar grafico' : 'Ver grafico';
 
             // Grafico solo para moneda base y gastos
             const filteredForChart = monthExpenses.filter(e => e.currency === baseCurrency && e.amount < 0);
@@ -304,6 +309,9 @@
                     emptyStateBanner.style.display = 'block';
                     emptyStateBanner.innerHTML = `<strong>No hay gastos en ${baseCurrency.toUpperCase()}.</strong> Carga el primero con + Agregar gasto.`;
                 }
+            } else if (!chartExpanded) {
+                if (pieChart) { pieChart.destroy(); pieChart = null; }
+                chartContainer.style.display = 'none';
             } else {
                 chartContainer.style.display = 'flex';
                 chartBox.style.display = 'flex';
@@ -755,6 +763,11 @@
             filterCategory = 'all';
             document.getElementById('filterCurrency').value = 'all';
             document.getElementById('filterCategory').value = 'all';
+            updateChartAndLegend();
+        });
+
+        document.getElementById('toggleChart').addEventListener('click', () => {
+            chartExpanded = !chartExpanded;
             updateChartAndLegend();
         });
 

@@ -37,10 +37,10 @@
             </div>
         </header>
 
-        <div class="form-container">
+            <div class="form-container">
             <h2 align="center">Categorias</h2>
             <div id="categories-manager">
-                <p class="section-hint">Arrastra para ordenar. Guardar aplica el orden.</p>
+                <p class="section-hint">Agregar, editar o eliminar categorias. Los cambios se guardan automaticamente.</p>
                 <div class="categories-meta">
                     <span id="categories-count"></span>
                 </div>
@@ -52,7 +52,6 @@
                     <input type="text" id="newCategory" placeholder="Agregar categoria">
                     <button id="addCategory" class="nav-button">Agregar</button>
                 </div>
-                <button id="saveCategories" class="nav-button">Guardar categorias</button>
                 <div id="categoriesMessage" class="form-message"></div>
             </div>
         </div>
@@ -250,13 +249,11 @@
     <script>
         let categories = [];
         let categoriesLower = new Set();
-        let removedCategoriesLower = new Set();
         let allTags = new Set();
         let addFormSelectedTags = new Set();
         let editFormSelectedTags = new Set();
         let currentCurrency = "usd";
         let currentStartDate = 1;
-        let draggedItem = null;
         let recurringExpenses = [];
         let recurringExpenseToDelete = null;
         let recurringExpenseToEdit = null;
@@ -272,171 +269,157 @@
         }
 
         // --- Category Management ---
-        function syncCategoriesLower() {
-            categoriesLower = new Set(categories.map(c => c.toLowerCase()));
-        }
+function syncCategoriesLower() {
+    categoriesLower = new Set(categories.map(c => c.toLowerCase()));
+}
 
-        function renderCategories() {
-            const list = document.getElementById('categories-list');
-            const emptyMessage = document.getElementById('categories-empty');
-            const countLabel = document.getElementById('categories-count');
-            list.innerHTML = '';
-            syncCategoriesLower();
-            if (categories.length === 0) {
-                emptyMessage.style.display = 'block';
-                countLabel.textContent = '0 categorias';
-                return;
-            }
-            emptyMessage.style.display = 'none';
-            countLabel.textContent = `${categories.length} categorias`;
-            categories.forEach((category, index) => {
-                const item = document.createElement('div');
-                item.className = 'category-item';
-                item.draggable = true;
-                item.dataset.index = index;
-                item.innerHTML = `
-                    <div class="category-handle-area">
-                        <span class="drag-handle"><i class="fa-solid fa-grip-lines"></i></span>
-                        <span>${category}</span>
-                    </div>
-                    <button class="delete-button" onclick="removeCategory(${index})">
-                        <i class="fa-solid fa-times"></i>
-                    </button>
-                `;
-                item.addEventListener('dragstart', handleDragStart);
-                item.addEventListener('dragover', handleDragOver);
-                item.addEventListener('dragleave', handleDragLeave);
-                item.addEventListener('dragend', handleDragEnd);
-                item.addEventListener('drop', handleDrop);
-                list.appendChild(item);
-            });
-        }
+function renderCategories() {
+    const list = document.getElementById('categories-list');
+    const emptyMessage = document.getElementById('categories-empty');
+    const countLabel = document.getElementById('categories-count');
+    list.innerHTML = '';
+    syncCategoriesLower();
+    if (categories.length === 0) {
+        emptyMessage.style.display = 'block';
+        countLabel.textContent = '0 categorias';
+        return;
+    }
+    emptyMessage.style.display = 'none';
+    countLabel.textContent = `${categories.length} categorias`;
+    categories.forEach((category, index) => {
+        const item = document.createElement('div');
+        item.className = 'category-item';
+        item.dataset.index = index;
+        item.innerHTML = `
+            <div class="category-handle-area">
+                <span class="category-name">${category}</span>
+            </div>
+            <div class="category-actions">
+                <button class="edit-button" data-action="edit" data-index="${index}">
+                    <i class="fa-solid fa-pen-to-square"></i>
+                </button>
+                <button class="delete-button" data-action="delete" data-index="${index}">
+                    <i class="fa-solid fa-trash-can"></i>
+                </button>
+            </div>
+        `;
+        list.appendChild(item);
+    });
+}
 
-        function handleDragStart(e) {
-            this.classList.add('dragging');
-            draggedItem = this;
-            e.dataTransfer.effectAllowed = 'move';
-            e.dataTransfer.setData('text/html', this.innerHTML);
-            removePlaceholders();
-        }
+function sanitizeCategoryName(raw) {
+    return raw.trim().replace(/[<>]/g, ' ').trim();
+}
 
-        function handleDragOver(e) {
-            e.preventDefault();
-            e.dataTransfer.dropEffect = 'move';
-            this.classList.add('drag-over');
-            if (this === draggedItem) return false;
-            const rect = this.getBoundingClientRect();
-            const clientY = e.clientY;
-            const threshold = rect.top + (rect.height / 2);
-            const isBefore = clientY < threshold;
-            removePlaceholders();
-            const placeholder = document.createElement('div');
-            placeholder.className = 'placeholder';
-            if (isBefore) {
-                this.parentNode.insertBefore(placeholder, this);
-            } else {
-                this.parentNode.insertBefore(placeholder, this.nextSibling);
-            }
-            return false;
-        }
-
-        function handleDragLeave() { this.classList.remove('drag-over'); }
-        function handleDragEnd() {
-            this.classList.remove('dragging');
-            document.querySelectorAll('.category-item, .tag-item').forEach(item => item.classList.remove('drag-over'));
-            removePlaceholders();
-        }
-        function removePlaceholders() { document.querySelectorAll('.placeholder').forEach(p => p.remove()); }
-
-        function handleDrop(e) {
-            e.stopPropagation();
-            e.preventDefault();
-            removePlaceholders();
-            if (draggedItem !== this) {
-                const fromIndex = parseInt(draggedItem.dataset.index, 10);
-                let toIndex = parseInt(this.dataset.index, 10);
-                const rect = this.getBoundingClientRect();
-                const isBefore = e.clientY < rect.top + rect.height / 2;
-                if (!isBefore) toIndex++;
-                if (fromIndex < toIndex) toIndex--;
-                const list = categories;
-                const movedItem = list.splice(fromIndex, 1)[0];
-                list.splice(toIndex, 0, movedItem);
-                renderCategories();
-            }
-            return false;
-        }
-
-        function sanitizeCategoryName(raw) {
-            return raw.trim().replace(/[<>]/g, ' ').trim();
-        }
-
-        function addCategory() {
-            const input = document.getElementById('newCategory');
-            const category = sanitizeCategoryName(input.value);
-            const exists = categoriesLower.has(category.toLowerCase());
-            if (category && !exists) {
-                categories.push(category);
-                removedCategoriesLower.delete(category.toLowerCase());
+function addCategory() {
+    const input = document.getElementById('newCategory');
+    const category = sanitizeCategoryName(input.value);
+    const exists = categoriesLower.has(category.toLowerCase());
+    if (category && !exists) {
+        const updated = [...categories, category];
+        saveCategoriesList(updated).then((ok) => {
+            if (ok) {
+                categories = updated;
                 renderCategories();
                 input.value = '';
-            } else if (exists) {
-                showMessage('categoriesMessage', 'La categoria ya existe', false);
-            } else if (!category) {
-                showMessage('categoriesMessage', 'El nombre de la categoria no puede estar vacio.', false);
             }
-        }
+        });
+    } else if (exists) {
+        showMessage('categoriesMessage', 'La categoria ya existe', false);
+    } else if (!category) {
+        showMessage('categoriesMessage', 'El nombre de la categoria no puede estar vacio.', false);
+    }
+}
 
-        function removeCategory(index) {
-            if (categories[index]) {
-                removedCategoriesLower.add(categories[index].toLowerCase());
-            }
-            categories.splice(index, 1);
+function removeCategory(index) {
+    const removed = categories[index];
+    if (!removed) return;
+    if (!confirm(`Eliminar la categoria "${removed}"?`)) return;
+    const updated = categories.filter((_, i) => i !== index);
+    if (updated.length === 0) {
+        showMessage('categoriesMessage', 'Se requiere al menos una categoria', false);
+        return;
+    }
+    saveCategoriesList(updated).then((ok) => {
+        if (ok) {
+            categories = updated;
             renderCategories();
-            if (categories.length === 0) {
-                showMessage('categoriesMessage', 'Se requiere al menos una categoria', false);
-            }
         }
+    });
+}
 
-        async function saveCategories() {
-            if (categories.length === 0) {
-                showMessage('categoriesMessage', 'Se requiere al menos una categoria', false);
-                return;
-            }
-            try {
-                let merged = [...categories];
-                const existingResponse = await fetch('/categories');
-                if (existingResponse.ok) {
-                    const existing = await existingResponse.json();
-                    const mergedLower = new Set(merged.map(c => c.toLowerCase()));
-                    (existing || []).forEach((cat) => {
-                        const lower = String(cat).toLowerCase();
-                        if (!mergedLower.has(lower) && !removedCategoriesLower.has(lower)) {
-                            merged.push(cat);
-                            mergedLower.add(lower);
-                        }
-                    });
-                }
-                const response = await fetch('/categories/edit', {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(merged)
-                });   
-                if (response.ok) {
-                    showMessage('categoriesMessage', 'Categorias guardadas con exito', true);
-                    removedCategoriesLower.clear();
-                    await initialize();
-                } else {
-                    const error = await response.json();
-                    showMessage('categoriesMessage', `No se pudieron guardar las categorias: ${error.error}`, false);
-                }
-            } catch (error) {
-                console.error('Error guardando categorias:', error);
-                showMessage('categoriesMessage', 'Error guardando categorias', false);
-            }
+function startEditCategory(index) {
+    const list = document.getElementById('categories-list');
+    const item = list.querySelector(`.category-item[data-index="${index}"]`);
+    if (!item) return;
+    const current = categories[index] || '';
+    item.innerHTML = `
+        <div class="category-handle-area">
+            <input type="text" class="category-edit-input" value="${current}">
+        </div>
+        <div class="category-actions">
+            <button class="edit-button" data-action="save" data-index="${index}">
+                <i class="fa-solid fa-check"></i>
+            </button>
+            <button class="delete-button" data-action="cancel" data-index="${index}">
+                <i class="fa-solid fa-times"></i>
+            </button>
+        </div>
+    `;
+    const input = item.querySelector('.category-edit-input');
+    input.focus();
+    input.select();
+}
+
+function cancelEditCategory() {
+    renderCategories();
+}
+
+function saveEditCategory(index, value) {
+    const name = sanitizeCategoryName(value);
+    if (!name) {
+        showMessage('categoriesMessage', 'El nombre de la categoria no puede estar vacio.', false);
+        return;
+    }
+    const lower = name.toLowerCase();
+    const exists = categoriesLower.has(lower) && categories[index].toLowerCase() !== lower;
+    if (exists) {
+        showMessage('categoriesMessage', 'La categoria ya existe', false);
+        return;
+    }
+    const updated = categories.slice();
+    updated[index] = name;
+    saveCategoriesList(updated).then((ok) => {
+        if (ok) {
+            categories = updated;
+            renderCategories();
         }
-        
-        // --- Tag Input Component ---
+    });
+}
+
+async function saveCategoriesList(nextCategories) {
+    try {
+        const response = await fetch('/categories/edit', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(nextCategories)
+        });
+        if (response.ok) {
+            showMessage('categoriesMessage', 'Categorias guardadas con exito', true);
+            return true;
+        }
+        const error = await response.json();
+        showMessage('categoriesMessage', `No se pudieron guardar las categorias: ${error.error}`, false);
+        return false;
+    } catch (error) {
+        console.error('Error guardando categorias:', error);
+        showMessage('categoriesMessage', 'Error guardando categorias', false);
+        return false;
+    }
+}
+
+
+// --- Tag Input Component ---
         function createTagInput(inputId, selectedContainerId, dropdownId, selectedTagsSet) {
             const input = document.getElementById(inputId);
             const selectedContainer = document.getElementById(selectedContainerId);
@@ -806,7 +789,6 @@
                         categories = fallback;
                     }
                 }
-                removedCategoriesLower.clear();
                 currentCurrency = config.currency;
                 currentStartDate = config.startDate;
                 allTags.clear();
@@ -855,7 +837,18 @@
 
         // --- Event Listeners ---
         document.getElementById('addCategory').addEventListener('click', addCategory);
-        document.getElementById('saveCategories').addEventListener('click', saveCategories);
+        document.getElementById('categories-list').addEventListener('click', (e) => {
+            const action = e.target.closest('button')?.dataset?.action;
+            const index = parseInt(e.target.closest('button')?.dataset?.index, 10);
+            if (!action || Number.isNaN(index)) return;
+            if (action === 'edit') startEditCategory(index);
+            if (action === 'delete') removeCategory(index);
+            if (action === 'cancel') cancelEditCategory();
+            if (action === 'save') {
+                const input = document.querySelector(`.category-item[data-index="${index}"] .category-edit-input`);
+                if (input) saveEditCategory(index, input.value);
+            }
+        });
         document.getElementById('saveCurrency').addEventListener('click', saveCurrency);
         document.getElementById('saveStartDate').addEventListener('click', saveStartDate);
         document.getElementById('csv-import-file').addEventListener('change', handleCsvImport);

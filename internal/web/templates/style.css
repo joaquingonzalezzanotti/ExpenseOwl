@@ -566,34 +566,14 @@ input:focus-visible {
 }
 
 .category-item {
-    cursor: grab;
-}
-.category-item.dragging {
-    opacity: 0.5;
-    cursor: grabbing;
-}
-.category-item.drag-over {
-    border: 1px dashed var(--accent);
-    background-color: rgba(105, 175, 222, 0.1);
-}
-.category-item .drag-handle {
-    cursor: grab;
-    margin-right: 6px;
-    color: var(--text-secondary);
+    cursor: default;
 }
 .category-handle-area {
     display: flex;
     align-items: center;
     gap: 0.5rem;
+    flex: 1;
 }
-.placeholder {
-    border: 2px dashed var(--accent);
-    background-color: rgba(105, 175, 222, 0.1);
-    margin: 0.25rem 0;
-    height: 2px;
-    border-radius: 9999px;
-}
-
 .category-item {
     background-color: var(--bg-primary);
     border: 1px solid var(--border);
@@ -603,6 +583,20 @@ input:focus-visible {
     align-items: center;
     gap: 0.25rem;
     justify-content: space-between;
+}
+
+.category-actions {
+    display: flex;
+    gap: 0.25rem;
+}
+
+.category-edit-input {
+    width: 100%;
+    padding: 0.4rem 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
 }
 
 .category-item .delete-button {
