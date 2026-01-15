@@ -897,6 +897,49 @@ async function saveCategoriesList(nextCategories) {
             }
         }
 
+        async function handleCsvImportOld(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const formData = new FormData();
+            formData.append('file', file);
+            const messageDiv = document.getElementById('importMessage');
+            const summaryDiv = document.getElementById('importSummary');
+
+            messageDiv.textContent = 'Importando... puede demorar con archivos grandes.';
+            messageDiv.className = 'form-message';
+            summaryDiv.style.display = 'none';
+
+            try {
+                const response = await fetch('/import/csvold', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    messageDiv.textContent = 'Importacion completada';
+                    messageDiv.className = 'form-message success';
+                    summaryDiv.style.display = 'block';
+                    document.getElementById('summary-processed').textContent = result.total_processed;
+                    document.getElementById('summary-imported').textContent = result.imported;
+                    document.getElementById('summary-skipped').textContent = result.skipped;
+                    document.getElementById('summary-new-categories').textContent = (result.new_categories || []).join(', ') || 'None';
+                    
+                    await initialize();
+                } else {
+                    messageDiv.textContent = `Error: ${result.error || 'No se pudo importar el CSV'}`;
+                    messageDiv.className = 'form-message error';
+                }
+            } catch (error) {
+                console.error('Error importing CSV (legacy):', error);
+                messageDiv.textContent = 'Error: ocurri un problema inesperado durante la importacion.';
+                messageDiv.className = 'form-message error';
+            } finally {
+                event.target.value = '';
+            }
+        }
+
         // --- Initialization ---
         async function initialize() {
             try {
