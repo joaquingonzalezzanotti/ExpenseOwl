@@ -40,9 +40,19 @@
             <div class="form-container">
             <h2 align="center">Categorias</h2>
             <div id="categories-manager">
-                <p class="section-hint">Agregar, editar o eliminar categorias. Los cambios se guardan automaticamente.</p>
-                <div class="categories-meta">
-                    <span id="categories-count"></span>
+                <div class="categories-header">
+                    <div>
+                        <p class="section-hint">Agregar, editar o eliminar categorias. Los cambios se guardan automaticamente.</p>
+                    </div>
+                    <div class="categories-tools">
+                        <label class="category-search">
+                            <i class="fa-solid fa-magnifying-glass"></i>
+                            <input type="text" id="categorySearch" placeholder="Buscar categoria">
+                        </label>
+                        <div class="categories-meta">
+                            <span id="categories-count"></span>
+                        </div>
+                    </div>
                 </div>
                 <div id="categories-list" class="categories-list"></div>
                 <div id="categories-empty" class="empty-state" style="display: none;">
@@ -249,6 +259,8 @@
     <script>
         let categories = [];
         let categoriesLower = new Set();
+        let categoriesLoading = true;
+        let categoryFilter = '';
         let allTags = new Set();
         let addFormSelectedTags = new Set();
         let editFormSelectedTags = new Set();
@@ -279,6 +291,27 @@ function renderCategories() {
     const countLabel = document.getElementById('categories-count');
     list.innerHTML = '';
     syncCategoriesLower();
+    if (categoriesLoading) {
+        countLabel.textContent = 'Cargando categorias...';
+        emptyMessage.style.display = 'none';
+        for (let i = 0; i < 4; i++) {
+            const item = document.createElement('div');
+            item.className = 'category-item category-skeleton';
+            item.innerHTML = `
+                <div class="category-handle-area">
+                    <span class="skeleton-bar"></span>
+                </div>
+                <div class="category-actions">
+                    <span class="skeleton-icon"></span>
+                    <span class="skeleton-icon"></span>
+                </div>
+            `;
+            list.appendChild(item);
+        }
+        renderCategorySelects();
+        return;
+    }
+    const filtered = categories.filter(category => category.toLowerCase().includes(categoryFilter));
     if (categories.length === 0) {
         emptyMessage.style.display = 'block';
         countLabel.textContent = '0 categorias';
@@ -286,8 +319,21 @@ function renderCategories() {
         return;
     }
     emptyMessage.style.display = 'none';
-    countLabel.textContent = `${categories.length} categorias`;
-    categories.forEach((category, index) => {
+    if (categoryFilter) {
+        countLabel.textContent = `${filtered.length} de ${categories.length} categorias`;
+    } else {
+        countLabel.textContent = `${categories.length} categorias`;
+    }
+    if (filtered.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'empty-state';
+        empty.textContent = 'No hay categorias que coincidan con la busqueda.';
+        list.appendChild(empty);
+        renderCategorySelects();
+        return;
+    }
+    filtered.forEach((category) => {
+        const index = categories.findIndex(item => item === category);
         const item = document.createElement('div');
         item.className = 'category-item';
         item.dataset.index = index;
@@ -830,27 +876,22 @@ async function saveCategoriesList(nextCategories) {
         // --- Initialization ---
         async function initialize() {
             try {
-                const [configResponse, expensesResponse, recurringExpensesResponse, categoriesResponse] = await Promise.all([
+                categoriesLoading = true;
+                renderCategories();
+                const [configResponse, categoriesResponse] = await Promise.all([
                     fetch('/config'),
-                    fetch('/expenses'),
-                    fetch('/recurring-expenses'),
                     fetch('/categories')
                 ]);
                 if (!configResponse.ok) throw new Error('No se pudo obtener la configuracion');
                 const config = await configResponse.json();
-                if (!expensesResponse.ok) throw new Error('No se pudieron obtener los gastos');
-                const expenses = await expensesResponse.json();
-                if (!recurringExpensesResponse.ok) throw new Error('No se pudieron obtener las transacciones recurrentes');
-                recurringExpenses = await recurringExpensesResponse.json() || [];
-
                 if (categoriesResponse.ok) {
                     categories = await categoriesResponse.json();
                     console.log('Categories from /categories endpoint:', categories);
                 }
-                
+
                 console.log('Categories after fetch:', categories);
                 console.log('Config categories:', config.categories);
-                
+
                 if (!categories || categories.length === 0) {
                     console.warn('No categories from endpoint, using config fallback');
                     const fallback = [...(config.categories || [])];
@@ -861,16 +902,26 @@ async function saveCategoriesList(nextCategories) {
                         categories = [];
                     }
                 }
-                
+
                 console.log('Final categories list:', categories);
-                
+                categoriesLoading = false;
+                renderCategories();
+
+                const [expensesResponse, recurringExpensesResponse] = await Promise.all([
+                    fetch('/expenses'),
+                    fetch('/recurring-expenses')
+                ]);
+                if (!expensesResponse.ok) throw new Error('No se pudieron obtener los gastos');
+                const expenses = await expensesResponse.json();
+                if (!recurringExpensesResponse.ok) throw new Error('No se pudieron obtener las transacciones recurrentes');
+                recurringExpenses = await recurringExpensesResponse.json() || [];
+
                 currentCurrency = config.currency;
                 currentStartDate = config.startDate;
                 allTags.clear();
                 (expenses || []).forEach(exp => (exp.tags || []).forEach(tag => allTags.add(tag)));
                 (recurringExpenses || []).forEach(exp => (exp.tags || []).forEach(tag => allTags.add(tag)));
 
-                renderCategories();
                 populateCurrencySelect();
                 populateStartDateInput();
                 renderRecurringExpenses(recurringExpenses);
@@ -884,6 +935,8 @@ async function saveCategoriesList(nextCategories) {
 
             } catch (error) {
                 console.error('No se pudo inicializar la configuracion:', error);
+                categoriesLoading = false;
+                renderCategories();
                 showMessage('categoriesMessage', 'No se pudo cargar la configuracion', false);
             }
         }
@@ -910,6 +963,10 @@ async function saveCategoriesList(nextCategories) {
 
         // --- Event Listeners ---
         document.getElementById('addCategory').addEventListener('click', addCategory);
+        document.getElementById('categorySearch').addEventListener('input', (e) => {
+            categoryFilter = e.target.value.trim().toLowerCase();
+            renderCategories();
+        });
         document.getElementById('categories-list').addEventListener('click', (e) => {
             const action = e.target.closest('button')?.dataset?.action;
             const index = parseInt(e.target.closest('button')?.dataset?.index, 10);
