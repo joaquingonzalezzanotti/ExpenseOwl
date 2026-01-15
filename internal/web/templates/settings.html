@@ -282,6 +282,7 @@ function renderCategories() {
     if (categories.length === 0) {
         emptyMessage.style.display = 'block';
         countLabel.textContent = '0 categorias';
+        renderCategorySelects();
         return;
     }
     emptyMessage.style.display = 'none';
@@ -305,25 +306,91 @@ function renderCategories() {
         `;
         list.appendChild(item);
     });
+    renderCategorySelects();
 }
 
 function sanitizeCategoryName(raw) {
     return raw.trim().replace(/[<>]/g, ' ').trim();
 }
 
-function addCategory() {
+function renderCategorySelects() {
+    const options = categories.map(c => `<option value="${c}">${c}</option>`).join('');
+    document.getElementById('recurringCategory').innerHTML = options;
+    document.getElementById('editRecurringCategory').innerHTML = options;
+}
+
+function applyCategoriesUpdate(updatedCategories) {
+    categories = updatedCategories || [];
+    renderCategories();
+}
+
+async function addCategoryOnServer(category) {
+    try {
+        const response = await fetch('/categories/add', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: category })
+        });
+        if (response.ok) {
+            return await response.json();
+        }
+        const error = await response.json().catch(() => ({}));
+        showMessage('categoriesMessage', `No se pudo agregar la categoria: ${error.error || 'Error desconocido'}`, false);
+    } catch (error) {
+        console.error('Error agregando categoria:', error);
+        showMessage('categoriesMessage', 'Error agregando categoria', false);
+    }
+    return null;
+}
+
+async function deleteCategoryOnServer(category) {
+    try {
+        const response = await fetch('/categories/delete', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: category })
+        });
+        if (response.ok) {
+            return await response.json();
+        }
+        const error = await response.json().catch(() => ({}));
+        showMessage('categoriesMessage', `No se pudo eliminar la categoria: ${error.error || 'Error desconocido'}`, false);
+    } catch (error) {
+        console.error('Error eliminando categoria:', error);
+        showMessage('categoriesMessage', 'Error eliminando categoria', false);
+    }
+    return null;
+}
+
+async function renameCategoryOnServer(fromCategory, toCategory) {
+    try {
+        const response = await fetch('/categories/rename', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ from: fromCategory, to: toCategory })
+        });
+        if (response.ok) {
+            return await response.json();
+        }
+        const error = await response.json().catch(() => ({}));
+        showMessage('categoriesMessage', `No se pudo editar la categoria: ${error.error || 'Error desconocido'}`, false);
+    } catch (error) {
+        console.error('Error editando categoria:', error);
+        showMessage('categoriesMessage', 'Error editando categoria', false);
+    }
+    return null;
+}
+
+async function addCategory() {
     const input = document.getElementById('newCategory');
     const category = sanitizeCategoryName(input.value);
     const exists = categoriesLower.has(category.toLowerCase());
     if (category && !exists) {
-        const updated = [...categories, category];
-        saveCategoriesList(updated).then((ok) => {
-            if (ok) {
-                categories = updated;
-                renderCategories();
-                input.value = '';
-            }
-        });
+        const updated = await addCategoryOnServer(category);
+        if (updated) {
+            applyCategoriesUpdate(updated);
+            input.value = '';
+        }
     } else if (exists) {
         showMessage('categoriesMessage', 'La categoria ya existe', false);
     } else if (!category) {
@@ -331,31 +398,14 @@ function addCategory() {
     }
 }
 
-function removeCategory(index) {
+async function removeCategory(index) {
     const removed = categories[index];
     if (!removed) return;
     if (!confirm(`Eliminar la categoria "${removed}"?`)) return;
-    
-    const updated = categories.filter((_, i) => i !== index);
-    
-    // Safety validation: don't allow removing the last category
-    if (updated.length === 0) {
-        showMessage('categoriesMessage', 'Se requiere al menos una categoria', false);
-        return;
+    const updated = await deleteCategoryOnServer(removed);
+    if (updated) {
+        applyCategoriesUpdate(updated);
     }
-    
-    // Additional safety: confirm we have valid categories before saving
-    if (!updated.every(cat => cat && cat.trim() !== '')) {
-        showMessage('categoriesMessage', 'Error: Hay categorias vacias', false);
-        return;
-    }
-    
-    saveCategoriesList(updated).then((ok) => {
-        if (ok) {
-            categories = updated;
-            renderCategories();
-        }
-    });
 }
 
 function startEditCategory(index) {
@@ -385,7 +435,7 @@ function cancelEditCategory() {
     renderCategories();
 }
 
-function saveEditCategory(index, value) {
+async function saveEditCategory(index, value) {
     const name = sanitizeCategoryName(value);
     if (!name) {
         showMessage('categoriesMessage', 'El nombre de la categoria no puede estar vacio.', false);
@@ -397,14 +447,10 @@ function saveEditCategory(index, value) {
         showMessage('categoriesMessage', 'La categoria ya existe', false);
         return;
     }
-    const updated = categories.slice();
-    updated[index] = name;
-    saveCategoriesList(updated).then((ok) => {
-        if (ok) {
-            categories = updated;
-            renderCategories();
-        }
-    });
+    const updated = await renameCategoryOnServer(categories[index], name);
+    if (updated) {
+        applyCategoriesUpdate(updated);
+    }
 }
 
 async function saveCategoriesList(nextCategories) {
@@ -827,8 +873,6 @@ async function saveCategoriesList(nextCategories) {
                 renderCategories();
                 populateCurrencySelect();
                 populateStartDateInput();
-                document.getElementById('recurringCategory').innerHTML = categories.map(c => `<option value="${c}">${c}</option>`).join('');
-                document.getElementById('editRecurringCategory').innerHTML = categories.map(c => `<option value="${c}">${c}</option>`).join('');
                 renderRecurringExpenses(recurringExpenses);
 
                 createTagInput('tags-input', 'selected-tags', 'tags-dropdown', addFormSelectedTags);

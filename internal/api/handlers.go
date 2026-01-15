@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/tanq16/expenseowl/internal/storage"
@@ -104,6 +105,147 @@ func (h *Handler) UpdateCategories(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "success"})
+}
+
+type categoryPayload struct {
+	Name string `json:"name"`
+}
+
+type categoryRenamePayload struct {
+	From string `json:"from"`
+	To   string `json:"to"`
+}
+
+func findCategoryIndex(categories []string, name string) int {
+	for i, category := range categories {
+		if strings.EqualFold(category, name) {
+			return i
+		}
+	}
+	return -1
+}
+
+func (h *Handler) AddCategory(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, ErrorResponse{Error: "Method not allowed"})
+		return
+	}
+	var payload categoryPayload
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "Invalid request body"})
+		return
+	}
+	name, err := storage.ValidateCategory(payload.Name)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: err.Error()})
+		return
+	}
+	categories, err := h.storage.GetCategories()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "Failed to get categories"})
+		log.Printf("API ERROR: Failed to get categories: %v\n", err)
+		return
+	}
+	if findCategoryIndex(categories, name) != -1 {
+		writeJSON(w, http.StatusConflict, ErrorResponse{Error: "Category already exists"})
+		return
+	}
+	updated := append(categories, name)
+	if err := h.storage.UpdateCategories(updated); err != nil {
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "Failed to update categories"})
+		log.Printf("API ERROR: Failed to update categories: %v\n", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, updated)
+}
+
+func (h *Handler) RenameCategory(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut {
+		writeJSON(w, http.StatusMethodNotAllowed, ErrorResponse{Error: "Method not allowed"})
+		return
+	}
+	var payload categoryRenamePayload
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "Invalid request body"})
+		return
+	}
+	from, err := storage.ValidateCategory(payload.From)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "Invalid current category"})
+		return
+	}
+	to, err := storage.ValidateCategory(payload.To)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: err.Error()})
+		return
+	}
+	categories, err := h.storage.GetCategories()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "Failed to get categories"})
+		log.Printf("API ERROR: Failed to get categories: %v\n", err)
+		return
+	}
+	index := findCategoryIndex(categories, from)
+	if index == -1 {
+		writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "Category not found"})
+		return
+	}
+	for i, category := range categories {
+		if i != index && strings.EqualFold(category, to) {
+			writeJSON(w, http.StatusConflict, ErrorResponse{Error: "Category already exists"})
+			return
+		}
+	}
+	if strings.EqualFold(categories[index], to) {
+		writeJSON(w, http.StatusOK, categories)
+		return
+	}
+	categories[index] = to
+	if err := h.storage.UpdateCategories(categories); err != nil {
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "Failed to update categories"})
+		log.Printf("API ERROR: Failed to update categories: %v\n", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, categories)
+}
+
+func (h *Handler) DeleteCategory(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		writeJSON(w, http.StatusMethodNotAllowed, ErrorResponse{Error: "Method not allowed"})
+		return
+	}
+	var payload categoryPayload
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "Invalid request body"})
+		return
+	}
+	name, err := storage.ValidateCategory(payload.Name)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: err.Error()})
+		return
+	}
+	categories, err := h.storage.GetCategories()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "Failed to get categories"})
+		log.Printf("API ERROR: Failed to get categories: %v\n", err)
+		return
+	}
+	index := findCategoryIndex(categories, name)
+	if index == -1 {
+		writeJSON(w, http.StatusNotFound, ErrorResponse{Error: "Category not found"})
+		return
+	}
+	if len(categories) <= 1 {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "At least one category is required"})
+		return
+	}
+	updated := append(categories[:index], categories[index+1:]...)
+	if err := h.storage.UpdateCategories(updated); err != nil {
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "Failed to update categories"})
+		log.Printf("API ERROR: Failed to update categories: %v\n", err)
+		return
+	}
+	writeJSON(w, http.StatusOK, updated)
 }
 
 func (h *Handler) GetCurrency(w http.ResponseWriter, r *http.Request) {
