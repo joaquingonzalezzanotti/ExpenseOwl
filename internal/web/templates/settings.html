@@ -261,6 +261,7 @@
         let categoriesLower = new Set();
         let categoriesLoading = true;
         let categoryFilter = '';
+        const categoriesCacheKey = 'categoriesCache';
         let allTags = new Set();
         let addFormSelectedTags = new Set();
         let editFormSelectedTags = new Set();
@@ -367,7 +368,30 @@ function renderCategorySelects() {
 
 function applyCategoriesUpdate(updatedCategories) {
     categories = updatedCategories || [];
+    saveCachedCategories(categories);
     renderCategories();
+}
+
+function loadCachedCategories() {
+    try {
+        const cached = localStorage.getItem(categoriesCacheKey);
+        if (!cached) return null;
+        const parsed = JSON.parse(cached);
+        if (!Array.isArray(parsed)) return null;
+        return parsed.filter(item => typeof item === 'string');
+    } catch (error) {
+        console.warn('No se pudo leer el cache de categorias:', error);
+        return null;
+    }
+}
+
+function saveCachedCategories(nextCategories) {
+    if (!Array.isArray(nextCategories)) return;
+    try {
+        localStorage.setItem(categoriesCacheKey, JSON.stringify(nextCategories));
+    } catch (error) {
+        console.warn('No se pudo guardar el cache de categorias:', error);
+    }
 }
 
 async function addCategoryOnServer(category) {
@@ -877,6 +901,11 @@ async function saveCategoriesList(nextCategories) {
         async function initialize() {
             try {
                 categoriesLoading = true;
+                const cached = loadCachedCategories();
+                if (cached && cached.length > 0) {
+                    categories = cached;
+                    categoriesLoading = false;
+                }
                 renderCategories();
                 const [configResponse, categoriesResponse] = await Promise.all([
                     fetch('/config'),
@@ -905,6 +934,7 @@ async function saveCategoriesList(nextCategories) {
 
                 console.log('Final categories list:', categories);
                 categoriesLoading = false;
+                saveCachedCategories(categories);
                 renderCategories();
 
                 const [expensesResponse, recurringExpensesResponse] = await Promise.all([
