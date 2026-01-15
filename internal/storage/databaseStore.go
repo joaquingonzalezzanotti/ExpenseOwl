@@ -316,7 +316,7 @@ func (s *databaseStore) updateCategoriesTable(categories []string) error {
 			return err
 		}
 	}
-	
+
 	log.Printf("[DEBUG] updateCategoriesTable deleting categories not in list")
 	// Delete categories that are not in the new list
 	// Using a safer approach with explicit list building
@@ -324,12 +324,12 @@ func (s *databaseStore) updateCategoriesTable(categories []string) error {
 		log.Printf("[DEBUG] updateCategoriesTable delete error: %v", err)
 		return fmt.Errorf("failed to delete removed categories: %v", err)
 	}
-	
+
 	if err = tx.Commit(); err != nil {
 		log.Printf("[DEBUG] updateCategoriesTable commit error: %v", err)
 		return fmt.Errorf("failed to commit category update: %v", err)
 	}
-	
+
 	log.Printf("[DEBUG] updateCategoriesTable successfully updated categories")
 	return nil
 }

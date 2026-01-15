@@ -80,13 +80,13 @@ func (h *Handler) UpdateCategories(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "Invalid request body"})
 		return
 	}
-	
+
 	// Validate that we have at least one category
 	if len(categories) == 0 {
 		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "At least one category is required"})
 		return
 	}
-	
+
 	var sanitizedCategories []string
 	for _, category := range categories {
 		sanitized, err := storage.ValidateCategory(category)
@@ -97,7 +97,7 @@ func (h *Handler) UpdateCategories(w http.ResponseWriter, r *http.Request) {
 		}
 		sanitizedCategories = append(sanitizedCategories, sanitized)
 	}
-	
+
 	if err := h.storage.UpdateCategories(sanitizedCategories); err != nil {
 		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "Failed to update categories"})
 		log.Printf("API ERROR: Failed to update categories: %v\n", err)
