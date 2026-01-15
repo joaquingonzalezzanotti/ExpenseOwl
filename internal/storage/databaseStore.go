@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -256,6 +257,7 @@ func (s *databaseStore) UpdateCategories(categories []string) error {
 func (s *databaseStore) getCategoriesFromTable() ([]string, error) {
 	rows, err := s.db.Query(`SELECT name FROM categories ORDER BY position ASC`)
 	if err != nil {
+		log.Printf("[DEBUG] getCategoriesFromTable query error: %v", err)
 		return nil, err
 	}
 	defer rows.Close()
@@ -264,13 +266,16 @@ func (s *databaseStore) getCategoriesFromTable() ([]string, error) {
 	for rows.Next() {
 		var name string
 		if err := rows.Scan(&name); err != nil {
+			log.Printf("[DEBUG] getCategoriesFromTable scan error: %v", err)
 			return nil, err
 		}
 		categories = append(categories, name)
 	}
 	if err := rows.Err(); err != nil {
+		log.Printf("[DEBUG] getCategoriesFromTable rows error: %v", err)
 		return nil, err
 	}
+	log.Printf("[DEBUG] getCategoriesFromTable returned %d categories: %v", len(categories), categories)
 	return categories, nil
 }
 
@@ -279,29 +284,54 @@ func (s *databaseStore) updateCategoriesTable(categories []string) error {
 		return fmt.Errorf("categories cannot be empty")
 	}
 
+	// Validate that no category is empty
+	for _, cat := range categories {
+		if strings.TrimSpace(cat) == "" {
+			return fmt.Errorf("category names cannot be empty")
+		}
+	}
+
+	log.Printf("[DEBUG] updateCategoriesTable called with %d categories: %v", len(categories), categories)
+
 	tx, err := s.db.Begin()
 	if err != nil {
+		log.Printf("[DEBUG] updateCategoriesTable begin transaction error: %v", err)
 		return err
 	}
 	defer func() {
 		if err != nil {
+			log.Printf("[DEBUG] updateCategoriesTable rolling back transaction due to error: %v", err)
 			_ = tx.Rollback()
 		}
 	}()
 
 	for i, name := range categories {
+		log.Printf("[DEBUG] updateCategoriesTable inserting category %d: %s", i+1, name)
 		if _, err = tx.Exec(
 			`INSERT INTO categories (name, position) VALUES ($1, $2)
 			 ON CONFLICT (name) DO UPDATE SET position = EXCLUDED.position`,
 			name, i+1,
 		); err != nil {
+			log.Printf("[DEBUG] updateCategoriesTable insert error for category %s: %v", name, err)
 			return err
 		}
 	}
+	
+	log.Printf("[DEBUG] updateCategoriesTable deleting categories not in list")
+	// Delete categories that are not in the new list
+	// Using a safer approach with explicit list building
 	if _, err = tx.Exec(`DELETE FROM categories WHERE NOT (name = ANY($1))`, pq.Array(categories)); err != nil {
-		return err
+		log.Printf("[DEBUG] updateCategoriesTable delete error: %v", err)
+		return fmt.Errorf("failed to delete removed categories: %v", err)
 	}
-	return tx.Commit()
+	
+	if err = tx.Commit(); err != nil {
+		log.Printf("[DEBUG] updateCategoriesTable commit error: %v", err)
+		return fmt.Errorf("failed to commit category update: %v", err)
+	}
+	
+	log.Printf("[DEBUG] updateCategoriesTable successfully updated categories")
+	return nil
 }
 
 func (s *databaseStore) GetCurrency() (string, error) {

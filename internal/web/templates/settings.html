@@ -335,11 +335,21 @@ function removeCategory(index) {
     const removed = categories[index];
     if (!removed) return;
     if (!confirm(`Eliminar la categoria "${removed}"?`)) return;
+    
     const updated = categories.filter((_, i) => i !== index);
+    
+    // Safety validation: don't allow removing the last category
     if (updated.length === 0) {
         showMessage('categoriesMessage', 'Se requiere al menos una categoria', false);
         return;
     }
+    
+    // Additional safety: confirm we have valid categories before saving
+    if (!updated.every(cat => cat && cat.trim() !== '')) {
+        showMessage('categoriesMessage', 'Error: Hay categorias vacias', false);
+        return;
+    }
+    
     saveCategoriesList(updated).then((ok) => {
         if (ok) {
             categories = updated;
@@ -398,6 +408,23 @@ function saveEditCategory(index, value) {
 }
 
 async function saveCategoriesList(nextCategories) {
+    // Safety check: ensure we're never sending an empty array
+    if (!nextCategories || nextCategories.length === 0) {
+        console.error('[SAVE] Attempting to save empty categories array!');
+        showMessage('categoriesMessage', 'Error: No se pueden eliminar todas las categorias. Se requiere al menos una.', false);
+        return false;
+    }
+    
+    // Additional validation: ensure no empty category names
+    const hasEmpty = nextCategories.some(cat => !cat || typeof cat !== 'string' || cat.trim() === '');
+    if (hasEmpty) {
+        console.error('[SAVE] Categories array contains empty values:', nextCategories);
+        showMessage('categoriesMessage', 'Error: Hay categorias vacias que no se pueden guardar.', false);
+        return false;
+    }
+    
+    console.log('[SAVE] Sending categories to server:', nextCategories);
+    
     try {
         const response = await fetch('/categories/edit', {
             method: 'PUT',
@@ -405,14 +432,16 @@ async function saveCategoriesList(nextCategories) {
             body: JSON.stringify(nextCategories)
         });
         if (response.ok) {
+            console.log('[SAVE] Categories saved successfully');
             showMessage('categoriesMessage', 'Categorias guardadas con exito', true);
             return true;
         }
         const error = await response.json();
+        console.error('[SAVE] Server returned error:', error);
         showMessage('categoriesMessage', `No se pudieron guardar las categorias: ${error.error}`, false);
         return false;
     } catch (error) {
-        console.error('Error guardando categorias:', error);
+        console.error('[SAVE] Error guardando categorias:', error);
         showMessage('categoriesMessage', 'Error guardando categorias', false);
         return false;
     }
@@ -770,25 +799,25 @@ async function saveCategoriesList(nextCategories) {
 
                 if (categoriesResponse.ok) {
                     categories = await categoriesResponse.json();
+                    console.log('Categories from /categories endpoint:', categories);
                 }
+                
+                console.log('Categories after fetch:', categories);
+                console.log('Config categories:', config.categories);
+                
                 if (!categories || categories.length === 0) {
+                    console.warn('No categories from endpoint, using config fallback');
                     const fallback = [...(config.categories || [])];
                     if (fallback.length > 0) {
-                        await fetch('/categories/edit', {
-                            method: 'PUT',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(fallback)
-                        });
-                        const retry = await fetch('/categories');
-                        if (retry.ok) {
-                            categories = await retry.json();
-                        } else {
-                            categories = fallback;
-                        }
-                    } else {
+                        console.log('Using fallback categories:', fallback);
                         categories = fallback;
+                    } else {
+                        categories = [];
                     }
                 }
+                
+                console.log('Final categories list:', categories);
+                
                 currentCurrency = config.currency;
                 currentStartDate = config.startDate;
                 allTags.clear();
