@@ -115,7 +115,11 @@ func InitializePostgresStore(baseConfig SystemConfig) (Storage, error) {
 }
 
 func makeDBURL(baseConfig SystemConfig) string {
-	return fmt.Sprintf("postgres://%s:%s@%s?sslmode=%s", baseConfig.StorageUser, baseConfig.StoragePass, baseConfig.StorageURL, baseConfig.StorageSSL)
+	options := []string{fmt.Sprintf("sslmode=%s", baseConfig.StorageSSL)}
+	if strings.Contains(baseConfig.StorageURL, "pooler") || strings.EqualFold(os.Getenv("STORAGE_PREFER_SIMPLE_PROTOCOL"), "true") {
+		options = append(options, "prefer_simple_protocol=true")
+	}
+	return fmt.Sprintf("postgres://%s:%s@%s?%s", baseConfig.StorageUser, baseConfig.StoragePass, baseConfig.StorageURL, strings.Join(options, "&"))
 }
 
 func createTables(db *sql.DB) error {
@@ -138,6 +142,7 @@ func createTables(db *sql.DB) error {
 		"ALTER TABLE expenses ADD COLUMN IF NOT EXISTS source VARCHAR(50)",
 		"ALTER TABLE expenses ADD COLUMN IF NOT EXISTS card VARCHAR(100)",
 		"ALTER TABLE recurring_expenses ADD COLUMN IF NOT EXISTS user_id VARCHAR(36)",
+		"ALTER TABLE recurring_expenses ADD COLUMN IF NOT EXISTS currency VARCHAR(3) NOT NULL DEFAULT 'usd'",
 		"ALTER TABLE categories ADD COLUMN IF NOT EXISTS user_id VARCHAR(36)",
 	}
 	for _, stmt := range alterStmts {
