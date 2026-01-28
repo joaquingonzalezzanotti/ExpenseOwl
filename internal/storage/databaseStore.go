@@ -189,7 +189,82 @@ func createTables(db *sql.DB) error {
 	if _, err := db.Exec(`UPDATE recurring_expenses SET flow = CASE WHEN amount >= 0 THEN 'income' ELSE 'expense' END WHERE flow IS NULL OR flow = ''`); err != nil {
 		return err
 	}
+	if err := ensureForeignKeys(db); err != nil {
+		return err
+	}
+	if err := cleanupExpiredSessions(db); err != nil {
+		return err
+	}
+	if err := cleanupExpiredPasswordResets(db); err != nil {
+		return err
+	}
 	return nil
+}
+
+func ensureForeignKeys(db *sql.DB) error {
+	type fk struct {
+		name      string
+		table     string
+		column    string
+		refTable  string
+		refColumn string
+	}
+	fks := []fk{
+		{name: "sessions_user_fk", table: "sessions", column: "user_id", refTable: "users", refColumn: "id"},
+		{name: "password_resets_user_fk", table: "password_resets", column: "user_id", refTable: "users", refColumn: "id"},
+		{name: "user_config_user_fk", table: "user_config", column: "user_id", refTable: "users", refColumn: "id"},
+		{name: "categories_user_fk", table: "categories", column: "user_id", refTable: "users", refColumn: "id"},
+		{name: "expenses_user_fk", table: "expenses", column: "user_id", refTable: "users", refColumn: "id"},
+		{name: "recurring_expenses_user_fk", table: "recurring_expenses", column: "user_id", refTable: "users", refColumn: "id"},
+	}
+
+	for _, fkDef := range fks {
+		var exists bool
+		if err := db.QueryRow(`SELECT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = $1)`, fkDef.name).Scan(&exists); err != nil {
+			return err
+		}
+		if exists {
+			continue
+		}
+		var orphans int
+		orphansQuery := fmt.Sprintf(
+			`SELECT COUNT(1) FROM %s t LEFT JOIN %s r ON t.%s = r.%s WHERE r.%s IS NULL`,
+			fkDef.table,
+			fkDef.refTable,
+			fkDef.column,
+			fkDef.refColumn,
+			fkDef.refColumn,
+		)
+		if err := db.QueryRow(orphansQuery).Scan(&orphans); err != nil {
+			return err
+		}
+		if orphans > 0 {
+			log.Printf("[WARN] skipping FK %s: %d orphan rows", fkDef.name, orphans)
+			continue
+		}
+		stmt := fmt.Sprintf(
+			`ALTER TABLE %s ADD CONSTRAINT %s FOREIGN KEY (%s) REFERENCES %s (%s) ON DELETE CASCADE`,
+			fkDef.table,
+			fkDef.name,
+			fkDef.column,
+			fkDef.refTable,
+			fkDef.refColumn,
+		)
+		if _, err := db.Exec(stmt); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func cleanupExpiredSessions(db *sql.DB) error {
+	_, err := db.Exec(`DELETE FROM sessions WHERE expires_at < NOW()`)
+	return err
+}
+
+func cleanupExpiredPasswordResets(db *sql.DB) error {
+	_, err := db.Exec(`DELETE FROM password_resets WHERE used_at IS NOT NULL OR expires_at < NOW()`)
+	return err
 }
 
 const defaultBootstrapEmail = "joaquingzzz79@gmail.com"
