@@ -19,7 +19,10 @@ DECISIONES DE NEGOCIO (PO)
 - Google OAuth: despues (no en MVP).
 - Verificacion de email: despues (post-MVP).
 - Recuperar contrasena: si, via codigo por email (Sprint 3).
-- Recordar sesion: si es posible (cookie con expiracion larga).
+- Recordar sesion: 7 dias (por seguridad).
+- Rate limit login: 3 intentos, bloqueo temporal (10 min).
+- Mostrar email del usuario en UI.
+- Emails con branding basico.
 - Bloqueo de pantallas: todas las pantallas requieren sesion.
 - Multi-moneda: por usuario (config individual).
 - Exportacion/auditoria: no ahora, pero disenar pensando en futuro.
@@ -114,9 +117,16 @@ Sprint 4 (futuro)
 - Exportacion CSV/JSON.
 - Auditoria/historial.
 
+BACKLOG POST-MVP
+----------------
+- Endpoint para borrar usuario (admin/self-service).
+- OAuth Google.
+- Exportacion CSV/JSON.
+- Auditoria/historial.
+
 NOTAS TECNICAS
 --------------
 - HTTPS obligatorio para cookies seguras.
 - Evitar JWT en front (preferir cookie HTTP-only).
-- Diseñar pensando en exportacion futura (sin implementarla ahora).
+- Disenar pensando en exportacion futura (sin implementarla ahora).
 - Bootstrap usuario: variables BOOTSTRAP_EMAIL y BOOTSTRAP_PASSWORD (si no existen, usa los defaults).

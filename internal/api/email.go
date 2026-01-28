@@ -49,8 +49,8 @@ func sendResetCodeEmail(toEmail, code string) error {
 	if cfg.fromName != "" {
 		fromHeader = fmt.Sprintf("%s <%s>", cfg.fromName, cfg.from)
 	}
-	subject := "Codigo de recuperacion"
-	body := fmt.Sprintf("Tu codigo de recuperacion es: %s\n\nEste codigo expira en 15 minutos.\n", code)
+	subject := "ExpenseLog - Codigo de recuperacion"
+	body := fmt.Sprintf("Hola,\n\nTu codigo de recuperacion de ExpenseLog es: %s\n\nEste codigo expira en 15 minutos.\nSi no pediste este codigo, podes ignorar este mensaje.\n\nGracias,\nEquipo ExpenseLog\n", code)
 	msg := strings.Join([]string{
 		"From: " + fromHeader,
 		"To: " + toEmail,

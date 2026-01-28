@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/tanq16/expenseowl/internal/storage"
@@ -16,9 +17,11 @@ import (
 const (
 	sessionCookieName       = "expense_session"
 	sessionDuration         = 24 * time.Hour
-	sessionRememberDuration = 30 * 24 * time.Hour
+	sessionRememberDuration = 7 * 24 * time.Hour
 	minPasswordLength       = 8
 	resetCodeTTL            = 15 * time.Minute
+	maxLoginAttempts        = 3
+	loginBlockDuration      = 10 * time.Minute
 )
 
 type contextKey string
@@ -37,6 +40,14 @@ type authUserResponse struct {
 	Status    string    `json:"status"`
 	CreatedAt time.Time `json:"createdAt"`
 }
+
+type loginAttempt struct {
+	count       int
+	lockedUntil time.Time
+}
+
+var loginAttemptMu = &sync.Mutex{}
+var loginAttempts = map[string]*loginAttempt{}
 
 type resetRequestPayload struct {
 	Email string `json:"email"`
@@ -140,9 +151,15 @@ func (h *Handler) AuthLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	email := normalizeEmail(payload.Email)
+	key := loginKey(email, readClientIP(r))
+	if blocked, _ := isLoginBlocked(key); blocked {
+		writeJSON(w, http.StatusTooManyRequests, ErrorResponse{Error: "Demasiados intentos. Intenta de nuevo en unos minutos"})
+		return
+	}
 	user, err := h.storage.GetUserByEmail(email)
 	if err != nil {
 		if err == sql.ErrNoRows {
+			recordLoginFailure(key)
 			writeJSON(w, http.StatusUnauthorized, ErrorResponse{Error: "Invalid credentials"})
 			return
 		}
@@ -150,9 +167,11 @@ func (h *Handler) AuthLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := storage.ComparePassword(user.PasswordHash, payload.Password); err != nil {
+		recordLoginFailure(key)
 		writeJSON(w, http.StatusUnauthorized, ErrorResponse{Error: "Invalid credentials"})
 		return
 	}
+	clearLoginAttempts(key)
 	if err := h.createSession(w, r, user.ID, payload.Remember); err != nil {
 		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "Failed to create session"})
 		return
@@ -376,4 +395,52 @@ func readClientIP(r *http.Request) string {
 		return strings.TrimSpace(parts[0])
 	}
 	return r.RemoteAddr
+}
+
+func loginKey(email, ip string) string {
+	email = strings.ToLower(strings.TrimSpace(email))
+	ip = strings.TrimSpace(ip)
+	return email + "|" + ip
+}
+
+func isLoginBlocked(key string) (bool, time.Duration) {
+	loginAttemptMu.Lock()
+	defer loginAttemptMu.Unlock()
+	attempt, ok := loginAttempts[key]
+	if !ok {
+		return false, 0
+	}
+	if attempt.lockedUntil.IsZero() {
+		return false, 0
+	}
+	if time.Now().After(attempt.lockedUntil) {
+		delete(loginAttempts, key)
+		return false, 0
+	}
+	return true, time.Until(attempt.lockedUntil)
+}
+
+func recordLoginFailure(key string) (bool, time.Duration) {
+	loginAttemptMu.Lock()
+	defer loginAttemptMu.Unlock()
+	attempt, ok := loginAttempts[key]
+	if !ok {
+		attempt = &loginAttempt{}
+		loginAttempts[key] = attempt
+	}
+	if !attempt.lockedUntil.IsZero() && time.Now().Before(attempt.lockedUntil) {
+		return true, time.Until(attempt.lockedUntil)
+	}
+	attempt.count++
+	if attempt.count >= maxLoginAttempts {
+		attempt.lockedUntil = time.Now().Add(loginBlockDuration)
+		return true, loginBlockDuration
+	}
+	return false, 0
+}
+
+func clearLoginAttempts(key string) {
+	loginAttemptMu.Lock()
+	defer loginAttemptMu.Unlock()
+	delete(loginAttempts, key)
 }

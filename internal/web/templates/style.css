@@ -383,6 +383,19 @@ input:focus-visible {
     align-items: center;
 }
 
+.user-badge {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    padding: 0.3rem 0.75rem;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background-color: var(--bg-secondary);
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .view-button {
     background-color: var(--bg-secondary);
     border: 1px solid var(--border);

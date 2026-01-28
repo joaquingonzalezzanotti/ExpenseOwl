@@ -17,6 +17,7 @@ function resolveFlow(exp) {
 }
 
 let authChecked = false;
+let currentUser = null;
 
 async function checkAuthStatus() {
     const overlay = document.getElementById('authOverlay');
@@ -25,11 +26,15 @@ async function checkAuthStatus() {
         const res = await fetch('/auth/me');
         if (res.ok) {
             const user = await res.json();
+            currentUser = user;
+            updateUserBadge(user);
             hideAuthOverlay();
             authChecked = true;
             return user;
         }
         if (res.status === 401) {
+            currentUser = null;
+            updateUserBadge(null);
             showAuthOverlay();
             authChecked = true;
             return null;
@@ -78,6 +83,18 @@ function hideAuthOverlay() {
     overlay.classList.add('hidden');
     overlay.setAttribute('aria-hidden', 'true');
     document.body.classList.remove('auth-locked');
+}
+
+function updateUserBadge(user) {
+    const badge = document.getElementById('userEmailBadge');
+    if (!badge) return;
+    if (user && user.email) {
+        badge.textContent = user.email;
+        badge.style.display = 'inline-flex';
+    } else {
+        badge.textContent = '';
+        badge.style.display = 'none';
+    }
 }
 
 function setAuthTab(tab) {
