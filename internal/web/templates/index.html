@@ -327,7 +327,9 @@
             const baseContainer = document.getElementById('baseSummary');
             container.innerHTML = '';
             baseContainer.innerHTML = '';
-            const byCurrency = expenses.reduce((acc, exp) => {
+            // Exclude credit card movements from cashflow balance.
+            const cashflowExpenses = expenses.filter(exp => (exp.source || '').toUpperCase() !== 'TARJETA');
+            const byCurrency = cashflowExpenses.reduce((acc, exp) => {
                 const cur = exp.currency || baseCurrency;
                 acc[cur] = acc[cur] || { income: 0, expense: 0 };
                 if (exp.amount > 0) acc[cur].income += exp.amount;
