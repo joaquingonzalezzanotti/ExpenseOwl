@@ -18,6 +18,7 @@ const (
 	sessionDuration         = 24 * time.Hour
 	sessionRememberDuration = 30 * 24 * time.Hour
 	minPasswordLength       = 8
+	resetCodeTTL            = 15 * time.Minute
 )
 
 type contextKey string
@@ -35,6 +36,16 @@ type authUserResponse struct {
 	Email     string    `json:"email"`
 	Status    string    `json:"status"`
 	CreatedAt time.Time `json:"createdAt"`
+}
+
+type resetRequestPayload struct {
+	Email string `json:"email"`
+}
+
+type resetConfirmPayload struct {
+	Email    string `json:"email"`
+	Code     string `json:"code"`
+	Password string `json:"password"`
 }
 
 func userIDFromContext(ctx context.Context) (string, bool) {
@@ -186,6 +197,107 @@ func (h *Handler) AuthMe(w http.ResponseWriter, r *http.Request) {
 		Status:    user.Status,
 		CreatedAt: user.CreatedAt,
 	})
+}
+
+func (h *Handler) AuthResetRequest(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, ErrorResponse{Error: "Method not allowed"})
+		return
+	}
+	var payload resetRequestPayload
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "Invalid request body"})
+		return
+	}
+	email := normalizeEmail(payload.Email)
+	if email == "" || !strings.Contains(email, "@") {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "Invalid email"})
+		return
+	}
+	user, err := h.storage.GetUserByEmail(email)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "Failed to process request"})
+		return
+	}
+	code, err := newResetCode()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "Failed to generate code"})
+		return
+	}
+	reset := storage.PasswordReset{
+		UserID:    user.ID,
+		CodeHash:  hashResetCode(code),
+		CreatedAt: time.Now(),
+		ExpiresAt: time.Now().Add(resetCodeTTL),
+	}
+	if err := h.storage.CreatePasswordReset(reset); err != nil {
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "Failed to create reset code"})
+		return
+	}
+	if err := sendResetCodeEmail(email, code); err != nil {
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "Failed to send reset code"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (h *Handler) AuthResetConfirm(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, ErrorResponse{Error: "Method not allowed"})
+		return
+	}
+	var payload resetConfirmPayload
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "Invalid request body"})
+		return
+	}
+	email := normalizeEmail(payload.Email)
+	if email == "" || !strings.Contains(email, "@") {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "Invalid email"})
+		return
+	}
+	if len(payload.Password) < minPasswordLength {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "Password must be at least 8 characters"})
+		return
+	}
+	code := strings.TrimSpace(payload.Code)
+	if len(code) < 4 {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "Invalid code"})
+		return
+	}
+	user, err := h.storage.GetUserByEmail(email)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "Invalid code"})
+		return
+	}
+	reset, err := h.storage.GetLatestPasswordReset(user.ID)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "Invalid code"})
+		return
+	}
+	if time.Now().After(reset.ExpiresAt) {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "Codigo expirado"})
+		return
+	}
+	if hashResetCode(code) != reset.CodeHash {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "Codigo invalido"})
+		return
+	}
+	hash, err := storage.HashPassword(payload.Password)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "Failed to update password"})
+		return
+	}
+	if err := h.storage.UpdateUserPassword(user.ID, hash); err != nil {
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "Failed to update password"})
+		return
+	}
+	_ = h.storage.MarkPasswordResetUsed(reset.ID)
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 func (h *Handler) createSession(w http.ResponseWriter, r *http.Request, userID string, remember bool) error {

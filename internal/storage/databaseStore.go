@@ -40,6 +40,16 @@ const (
 		user_agent TEXT
 	);`
 
+	createPasswordResetsTableSQL = `
+	CREATE TABLE IF NOT EXISTS password_resets (
+		id VARCHAR(36) PRIMARY KEY,
+		user_id VARCHAR(36) NOT NULL,
+		code_hash TEXT NOT NULL,
+		created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+		expires_at TIMESTAMPTZ NOT NULL,
+		used_at TIMESTAMPTZ
+	);`
+
 	createUserConfigTableSQL = `
 	CREATE TABLE IF NOT EXISTS user_config (
 		user_id VARCHAR(36) PRIMARY KEY,
@@ -128,6 +138,7 @@ func createTables(db *sql.DB) error {
 	for _, query := range []string{
 		createUsersTableSQL,
 		createSessionsTableSQL,
+		createPasswordResetsTableSQL,
 		createUserConfigTableSQL,
 		createExpensesTableSQL,
 		createRecurringExpensesTableSQL,
@@ -167,6 +178,9 @@ func createTables(db *sql.DB) error {
 		return err
 	}
 	if _, err := db.Exec(`CREATE INDEX IF NOT EXISTS categories_user_idx ON categories (user_id, position)`); err != nil {
+		return err
+	}
+	if _, err := db.Exec(`CREATE INDEX IF NOT EXISTS password_resets_user_idx ON password_resets (user_id, created_at DESC)`); err != nil {
 		return err
 	}
 	if _, err := db.Exec(`UPDATE expenses SET flow = CASE WHEN amount >= 0 THEN 'income' ELSE 'expense' END WHERE flow IS NULL OR flow = ''`); err != nil {
@@ -399,6 +413,11 @@ func (s *databaseStore) GetUserByID(id string) (User, error) {
 	return user, nil
 }
 
+func (s *databaseStore) UpdateUserPassword(userID, passwordHash string) error {
+	_, err := s.db.Exec(`UPDATE users SET password_hash = $1 WHERE id = $2`, passwordHash, userID)
+	return err
+}
+
 func (s *databaseStore) CreateSession(session Session) error {
 	if session.CreatedAt.IsZero() {
 		session.CreatedAt = time.Now()
@@ -419,6 +438,42 @@ func (s *databaseStore) GetSession(id string) (Session, error) {
 
 func (s *databaseStore) DeleteSession(id string) error {
 	_, err := s.db.Exec(`DELETE FROM sessions WHERE id = $1`, id)
+	return err
+}
+
+func (s *databaseStore) CreatePasswordReset(reset PasswordReset) error {
+	if reset.ID == "" {
+		reset.ID = uuid.New().String()
+	}
+	if reset.CreatedAt.IsZero() {
+		reset.CreatedAt = time.Now()
+	}
+	_, err := s.db.Exec(`DELETE FROM password_resets WHERE user_id = $1 AND used_at IS NULL`, reset.UserID)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.Exec(
+		`INSERT INTO password_resets (id, user_id, code_hash, created_at, expires_at) VALUES ($1, $2, $3, $4, $5)`,
+		reset.ID,
+		reset.UserID,
+		reset.CodeHash,
+		reset.CreatedAt,
+		reset.ExpiresAt,
+	)
+	return err
+}
+
+func (s *databaseStore) GetLatestPasswordReset(userID string) (PasswordReset, error) {
+	query := `SELECT id, user_id, code_hash, created_at, expires_at FROM password_resets WHERE user_id = $1 AND used_at IS NULL ORDER BY created_at DESC LIMIT 1`
+	var reset PasswordReset
+	if err := s.db.QueryRow(query, userID).Scan(&reset.ID, &reset.UserID, &reset.CodeHash, &reset.CreatedAt, &reset.ExpiresAt); err != nil {
+		return PasswordReset{}, err
+	}
+	return reset, nil
+}
+
+func (s *databaseStore) MarkPasswordResetUsed(resetID string) error {
+	_, err := s.db.Exec(`UPDATE password_resets SET used_at = NOW() WHERE id = $1`, resetID)
 	return err
 }
 

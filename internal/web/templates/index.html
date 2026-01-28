@@ -214,6 +214,7 @@
                     <input type="checkbox" id="authLoginRemember" class="styled-checkbox">
                     Recordarme
                 </label>
+                <button type="button" class="auth-link" data-auth-link="reset">Olvide mi contrasena</button>
                 <button type="submit" class="nav-button">Ingresar</button>
             </form>
             <form id="authRegisterForm" class="auth-form" data-auth-form="register">
@@ -230,6 +231,25 @@
                     Recordarme
                 </label>
                 <button type="submit" class="nav-button">Crear cuenta</button>
+            </form>
+            <form id="authResetForm" class="auth-form" data-auth-form="reset">
+                <div class="form-group">
+                    <label for="authResetEmail">Email</label>
+                    <input type="email" id="authResetEmail" autocomplete="email" required>
+                </div>
+                <div class="form-group">
+                    <label for="authResetCode">Codigo</label>
+                    <input type="text" id="authResetCode" autocomplete="one-time-code" required>
+                </div>
+                <div class="form-group">
+                    <label for="authResetPassword">Nueva contrasena (min 8)</label>
+                    <input type="password" id="authResetPassword" autocomplete="new-password" required>
+                </div>
+                <div class="auth-reset-actions">
+                    <button type="button" class="nav-button" id="authSendResetCode">Enviar codigo</button>
+                    <button type="submit" class="nav-button">Confirmar</button>
+                </div>
+                <button type="button" class="auth-link" data-auth-link="login">Volver a ingresar</button>
             </form>
         </div>
     </div>

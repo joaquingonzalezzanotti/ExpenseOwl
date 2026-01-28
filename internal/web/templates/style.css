@@ -515,6 +515,24 @@ input:focus-visible {
     accent-color: var(--accent);
 }
 
+.auth-link {
+    background: none;
+    border: none;
+    color: var(--accent);
+    text-decoration: underline;
+    cursor: pointer;
+    padding: 0;
+    font-size: 0.85rem;
+    text-align: left;
+}
+
+.auth-reset-actions {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
 @keyframes tooltip-appear {
     to {
         opacity: 1;

@@ -34,10 +34,10 @@ async function checkAuthStatus() {
             authChecked = true;
             return null;
         }
-        showAuthOverlay('No se pudo validar la sesion');
+        showAuthOverlay('No se pudo validar la sesion', 'error');
     } catch (error) {
         console.error('Auth check failed:', error);
-        showAuthOverlay('No se pudo validar la sesion');
+        showAuthOverlay('No se pudo validar la sesion', 'error');
     }
     authChecked = true;
     return null;
@@ -53,7 +53,7 @@ function guardAppInit(initFn) {
     };
 }
 
-function showAuthOverlay(message) {
+function showAuthOverlay(message, type) {
     const overlay = document.getElementById('authOverlay');
     if (!overlay) return;
     overlay.classList.remove('hidden');
@@ -62,7 +62,13 @@ function showAuthOverlay(message) {
     const msg = document.getElementById('authMessage');
     if (msg) {
         msg.textContent = message || '';
-        msg.className = message ? 'form-message error' : 'form-message';
+        if (!message) {
+            msg.className = 'form-message';
+        } else if (type === 'success') {
+            msg.className = 'form-message success';
+        } else {
+            msg.className = 'form-message error';
+        }
     }
 }
 
@@ -94,6 +100,10 @@ function setupAuthUI() {
     tabs.forEach(tab => {
         tab.addEventListener('click', () => setAuthTab(tab.dataset.authTab));
     });
+    const links = document.querySelectorAll('[data-auth-link]');
+    links.forEach(link => {
+        link.addEventListener('click', () => setAuthTab(link.dataset.authLink));
+    });
 
     const loginForm = document.getElementById('authLoginForm');
     if (loginForm) {
@@ -110,14 +120,14 @@ function setupAuthUI() {
                 });
                 if (!response.ok) {
                     const error = await response.json().catch(() => ({}));
-                    showAuthOverlay(error.error || 'No se pudo iniciar sesion');
+                    showAuthOverlay(error.error || 'No se pudo iniciar sesion', 'error');
                     return;
                 }
                 hideAuthOverlay();
                 window.location.reload();
             } catch (error) {
                 console.error('Login failed:', error);
-                showAuthOverlay('No se pudo iniciar sesion');
+                showAuthOverlay('No se pudo iniciar sesion', 'error');
             }
         });
     }
@@ -137,14 +147,72 @@ function setupAuthUI() {
                 });
                 if (!response.ok) {
                     const error = await response.json().catch(() => ({}));
-                    showAuthOverlay(error.error || 'No se pudo registrar');
+                    showAuthOverlay(error.error || 'No se pudo registrar', 'error');
                     return;
                 }
                 hideAuthOverlay();
                 window.location.reload();
             } catch (error) {
                 console.error('Register failed:', error);
-                showAuthOverlay('No se pudo registrar');
+                showAuthOverlay('No se pudo registrar', 'error');
+            }
+        });
+    }
+
+    const resetSendButton = document.getElementById('authSendResetCode');
+    if (resetSendButton) {
+        resetSendButton.addEventListener('click', async () => {
+            const email = document.getElementById('authResetEmail')?.value.trim();
+            if (!email) {
+                showAuthOverlay('Ingresa un email valido', 'error');
+                return;
+            }
+            try {
+                const response = await fetch('/auth/reset/request', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email }),
+                });
+                if (!response.ok) {
+                    const error = await response.json().catch(() => ({}));
+                    showAuthOverlay(error.error || 'No se pudo enviar el codigo', 'error');
+                    return;
+                }
+                showAuthOverlay('Te enviamos un codigo al email', 'success');
+            } catch (error) {
+                console.error('Reset request failed:', error);
+                showAuthOverlay('No se pudo enviar el codigo', 'error');
+            }
+        });
+    }
+
+    const resetForm = document.getElementById('authResetForm');
+    if (resetForm) {
+        resetForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('authResetEmail')?.value.trim();
+            const code = document.getElementById('authResetCode')?.value.trim();
+            const password = document.getElementById('authResetPassword')?.value || '';
+            if (!email || !code || !password) {
+                showAuthOverlay('Completa todos los campos', 'error');
+                return;
+            }
+            try {
+                const response = await fetch('/auth/reset/confirm', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, code, password }),
+                });
+                if (!response.ok) {
+                    const error = await response.json().catch(() => ({}));
+                    showAuthOverlay(error.error || 'No se pudo actualizar la contrasena', 'error');
+                    return;
+                }
+                showAuthOverlay('Contrasena actualizada. Ya podes ingresar.', 'success');
+                setAuthTab('login');
+            } catch (error) {
+                console.error('Reset confirm failed:', error);
+                showAuthOverlay('No se pudo actualizar la contrasena', 'error');
             }
         });
     }
