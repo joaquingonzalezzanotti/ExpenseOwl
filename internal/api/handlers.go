@@ -383,6 +383,13 @@ func (h *Handler) AddExpense(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: err.Error()})
 		return
 	}
+	flow, adjustedAmount, err := normalizeFlow(expense.Flow, expense.Amount)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: err.Error()})
+		return
+	}
+	expense.Flow = flow
+	expense.Amount = adjustedAmount
 	if expense.Currency == "" {
 		if cfgCur, err := h.storage.GetCurrency(userID); err == nil {
 			expense.Currency = cfgCur
@@ -440,6 +447,13 @@ func (h *Handler) EditExpense(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: err.Error()})
 		return
 	}
+	flow, adjustedAmount, err := normalizeFlow(expense.Flow, expense.Amount)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: err.Error()})
+		return
+	}
+	expense.Flow = flow
+	expense.Amount = adjustedAmount
 	if expense.Currency == "" {
 		if cfgCur, err := h.storage.GetCurrency(userID); err == nil {
 			expense.Currency = cfgCur
@@ -521,6 +535,13 @@ func (h *Handler) AddRecurringExpense(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: err.Error()})
 		return
 	}
+	flow, adjustedAmount, err := normalizeFlow(re.Flow, re.Amount)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: err.Error()})
+		return
+	}
+	re.Flow = flow
+	re.Amount = adjustedAmount
 	if err := h.storage.AddRecurringExpense(userID, re); err != nil {
 		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "Failed to add recurring expense"})
 		log.Printf("API ERROR: Failed to add recurring expense: %v\n", err)
@@ -572,6 +593,13 @@ func (h *Handler) UpdateRecurringExpense(w http.ResponseWriter, r *http.Request)
 		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: err.Error()})
 		return
 	}
+	flow, adjustedAmount, err := normalizeFlow(re.Flow, re.Amount)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: err.Error()})
+		return
+	}
+	re.Flow = flow
+	re.Amount = adjustedAmount
 	if err := h.storage.UpdateRecurringExpense(userID, id, re, updateAll); err != nil {
 		writeJSON(w, http.StatusInternalServerError, ErrorResponse{Error: "Failed to update recurring expense"})
 		log.Printf("API ERROR: Failed to update recurring expense: %v\n", err)

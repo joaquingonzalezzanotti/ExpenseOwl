@@ -9,6 +9,13 @@ const currencyBehaviors = {
     eur: {symbol: "EUR", useComma: true, useDecimals: true, useSpace: false, right: false},
 };
 
+function resolveFlow(exp) {
+    if (!exp) return 'expense';
+    const flow = (exp.flow || '').toLowerCase();
+    if (flow) return flow;
+    return exp.amount > 0 ? 'income' : 'expense';
+}
+
 let authChecked = false;
 
 async function checkAuthStatus() {

@@ -179,9 +179,13 @@
                     <label for="recurringOccurrences">Ocurrencias</label>
                     <input type="number" id="recurringOccurrences" min="2" value="2" required>
                 </div>
-                <div class="form-group form-group-checkbox">
-                    <label for="recurringReportGain">Registrar ingreso</label>
-                    <input type="checkbox" id="recurringReportGain" class="styled-checkbox">
+                <div class="form-group">
+                    <label for="recurringFlow">Tipo</label>
+                    <select id="recurringFlow">
+                        <option value="expense">Gasto</option>
+                        <option value="income">Ingreso</option>
+                        <option value="refund">Reintegro</option>
+                    </select>
                 </div>
                 <button type="submit" class="nav-button">Agregar transaccin recurrente</button>
             </form>
@@ -245,9 +249,13 @@
                     <label for="editRecurringOccurrences">Ocurrencias (0 para indefinido)</label>
                     <input type="number" id="editRecurringOccurrences" min="0" value="0" required>
                 </div>
-                <div class="form-group form-group-checkbox">
-                    <label for="editRecurringReportGain">Registrar ingreso</label>
-                    <input type="checkbox" id="editRecurringReportGain" class="styled-checkbox">
+                <div class="form-group">
+                    <label for="editRecurringFlow">Tipo</label>
+                    <select id="editRecurringFlow">
+                        <option value="expense">Gasto</option>
+                        <option value="income">Ingreso</option>
+                        <option value="refund">Reintegro</option>
+                    </select>
                 </div>
             </form>
             <div class="modal-buttons">
@@ -850,7 +858,8 @@ async function saveCategoriesList(nextCategories) {
             if (!recurringExpenseToEdit) return;
             document.getElementById('editRecurringName').value = recurringExpenseToEdit.name;
             document.getElementById('editRecurringAmount').value = Math.abs(recurringExpenseToEdit.amount);
-            document.getElementById('editRecurringReportGain').checked = recurringExpenseToEdit.amount > 0;
+            const editFlow = recurringExpenseToEdit.flow || (recurringExpenseToEdit.amount > 0 ? 'income' : 'expense');
+            document.getElementById('editRecurringFlow').value = editFlow;
             document.getElementById('editRecurringCategory').value = recurringExpenseToEdit.category;
             document.getElementById('editRecurringInterval').value = recurringExpenseToEdit.interval;
             document.getElementById('editRecurringStartDate').value = new Date(recurringExpenseToEdit.startDate).toISOString().split('T')[0];
@@ -867,9 +876,12 @@ async function saveCategoriesList(nextCategories) {
 
         async function confirmRecurringUpdate(updateAll) {
             if (!recurringExpenseToEdit) return;
+            const flow = document.getElementById('editRecurringFlow').value || 'expense';
             let amount = parseFloat(document.getElementById('editRecurringAmount').value);
-            if (!document.getElementById('editRecurringReportGain').checked) {
+            if (flow === 'expense') {
                 amount *= -1;
+            } else {
+                amount = Math.abs(amount);
             }
 
             const updatedData = {
@@ -880,7 +892,8 @@ async function saveCategoriesList(nextCategories) {
                 tags: Array.from(editFormSelectedTags),
                 interval: document.getElementById('editRecurringInterval').value,
                 startDate: new Date(document.getElementById('editRecurringStartDate').value).toISOString(),
-                occurrences: parseInt(document.getElementById('editRecurringOccurrences').value, 10)
+                occurrences: parseInt(document.getElementById('editRecurringOccurrences').value, 10),
+                flow: flow
             };
             
             try {
@@ -1107,9 +1120,13 @@ async function saveCategoriesList(nextCategories) {
 
         document.getElementById('recurringExpenseForm').addEventListener('submit', async (e) => {
             e.preventDefault();
-            const isGain = document.getElementById('recurringReportGain').checked;
+            const flow = document.getElementById('recurringFlow').value || 'expense';
             let amount = parseFloat(document.getElementById('recurringAmount').value);
-            if (!isGain) amount *= -1;
+            if (flow === 'expense') {
+                amount *= -1;
+            } else {
+                amount = Math.abs(amount);
+            }
 
             const formData = {
                 name: document.getElementById('recurringName').value,
@@ -1118,7 +1135,8 @@ async function saveCategoriesList(nextCategories) {
                 tags: Array.from(addFormSelectedTags),
                 interval: document.getElementById('recurringInterval').value,
                 startDate: getISODateWithLocalTime(document.getElementById('recurringStartDate').value),
-                occurrences: parseInt(document.getElementById('recurringOccurrences').value, 10)
+                occurrences: parseInt(document.getElementById('recurringOccurrences').value, 10),
+                flow: flow
             };
 
             try {

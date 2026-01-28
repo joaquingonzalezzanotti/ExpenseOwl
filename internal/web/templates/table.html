@@ -113,9 +113,13 @@
                     </script>
                 </div>
                 
-                <div class="form-group form-group-checkbox">
-                    <label for="reportGain">Registrar ingreso</label>
-                    <input type="checkbox" id="reportGain" class="styled-checkbox">
+                <div class="form-group">
+                    <label for="movementType">Tipo</label>
+                    <select id="movementType">
+                        <option value="expense">Gasto</option>
+                        <option value="income">Ingreso</option>
+                        <option value="refund">Reintegro</option>
+                    </select>
                 </div>
 
                 <button type="submit" class="nav-button">Agregar gasto</button>
@@ -200,6 +204,7 @@
         const supportedCurrencies = Object.keys(currencyBehaviors);
         const sourceSelect = document.getElementById('sourceSelect');
         const cardGroup = document.getElementById('cardGroup');
+        const movementTypeSelect = document.getElementById('movementType');
         let categories = [];
         let searchQuery = '';
 
@@ -313,14 +318,14 @@
         }
 
         function editExpense(id, name, category, amount, tags, date) {
-            const isGain = amount > 0;
             document.getElementById('name').value = name;
             document.getElementById('category').value = category;
             document.getElementById('amount').value = Math.abs(amount);
-            document.getElementById('reportGain').checked = isGain;
             renderSelectedTags(tags);
             const exp = expensesForTable.find(e => e.id === id);
             document.getElementById('currencySelectForm').value = (exp?.currency) || currentCurrency;
+            const flow = exp?.flow || (amount > 0 ? 'income' : 'expense');
+            if (movementTypeSelect) movementTypeSelect.value = flow;
             const sourceValue = exp?.source || 'CA';
             sourceSelect.value = sourceValue;
             document.getElementById('cardInput').value = exp?.card || '';
@@ -447,6 +452,7 @@
                 currency: exp.currency || currentCurrency,
                 source: exp.source || 'CA',
                 card: exp.card || '',
+                flow: exp.flow || resolveFlow(exp),
                 ...updatedFields,
             };
             try {
@@ -494,6 +500,7 @@
                     currency: exp.currency || currentCurrency,
                     source: exp.source || '',
                     card: exp.card || '',
+                    flow: resolveFlow(exp),
                 }));
                 
                 allTags.clear();
@@ -575,10 +582,12 @@
             e.preventDefault();
             const form = e.target;
             const editId = form.dataset.editId;
-            const isGain = document.getElementById('reportGain').checked;
+            const movementType = movementTypeSelect ? movementTypeSelect.value : 'expense';
             let amount = parseFloat(document.getElementById('amount').value);
-            if (!isGain) {
+            if (movementType === 'expense') {
                 amount *= -1;
+            } else {
+                amount = Math.abs(amount);
             }
             const sourceValue = sourceSelect.value || 'CA';
             if (sourceValue === 'TARJETA' && !document.getElementById('cardInput').value.trim()) {
@@ -595,6 +604,7 @@
                 currency: document.getElementById('currencySelectForm').value || currentCurrency,
                 source: sourceValue,
                 card: sourceValue === 'TARJETA' ? document.getElementById('cardInput').value : '',
+                flow: movementType,
             };
             try {
                 const url = editId ? `/expense/edit?id=${editId}` : '/expense';
@@ -615,6 +625,7 @@
                     form.querySelector('button[type="submit"]').textContent = 'Agregar gasto';
                     populateFormCurrency();
                     sourceSelect.value = 'CA';
+                    if (movementTypeSelect) movementTypeSelect.value = 'expense';
                     toggleCardInput();
                     await initialize();
                     const today = new Date();

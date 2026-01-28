@@ -65,6 +65,7 @@
                     <i class="fa-solid fa-plus"></i> Agregar gasto
                 </button>
                 <button class="quick-action" data-action="income">Ingreso</button>
+                <button class="quick-action" data-action="refund">Reintegro</button>
                 <button class="quick-action" data-action="expense">Gasto</button>
                 <button class="quick-action" data-action="card-expense">Gasto con Tarjeta</button>
             </div>
@@ -134,9 +135,13 @@
                         </script>
                     </div>
                     
-                    <div class="form-group form-group-checkbox">
-                        <label for="reportGain">Registrar ingreso</label>
-                        <input type="checkbox" id="reportGain" class="styled-checkbox">
+                    <div class="form-group">
+                        <label for="movementType">Tipo</label>
+                        <select id="movementType">
+                            <option value="expense">Gasto</option>
+                            <option value="income">Ingreso</option>
+                            <option value="refund">Reintegro</option>
+                        </select>
                     </div>
     
                     <button type="submit" class="nav-button">Agregar gasto</button>
@@ -244,6 +249,7 @@
         const supportedCurrencies = Object.keys(currencyBehaviors);
         const sourceSelect = document.getElementById('sourceSelect');
         const cardGroup = document.getElementById('cardGroup');
+        const movementTypeSelect = document.getElementById('movementType');
         let filterCurrency = 'all';
         let filterCategory = 'all';
         let categories = [];
@@ -274,7 +280,7 @@
             const categoryTotals = {};
             let totalAmount = 0;
             expenses.forEach(exp => {
-                if (exp.amount < 0 && !disabledCategories.has(exp.category)) {
+                if (resolveFlow(exp) === 'expense' && !disabledCategories.has(exp.category)) {
                     const amount = Math.abs(exp.amount);
                     categoryTotals[exp.category] = (categoryTotals[exp.category] || 0) + amount;
                     totalAmount += amount;
@@ -291,13 +297,13 @@
 
         function calculateIncome(expenses) {
             return expenses
-                .filter(exp => exp.amount > 0)
-                .reduce((sum, exp) => sum + exp.amount, 0);
+                .filter(exp => resolveFlow(exp) === 'income')
+                .reduce((sum, exp) => sum + Math.abs(exp.amount), 0);
         }
 
         function calculateExpenses(expenses) {
             return expenses
-                .filter(exp => exp.amount < 0)
+                .filter(exp => resolveFlow(exp) === 'expense')
                 .reduce((sum, exp) => sum + Math.abs(exp.amount), 0);
         }
 
@@ -315,7 +321,7 @@
             const toggleChart = document.getElementById('toggleChart');
 
             const hasTransactions = monthExpensesAll.length > 0;
-            const hasBaseExpenses = monthExpensesAll.some(e => (e.currency || baseCurrency) === baseCurrency && e.amount < 0);
+            const hasBaseExpenses = monthExpensesAll.some(e => (e.currency || baseCurrency) === baseCurrency && resolveFlow(e) === 'expense');
             if (!hasTransactions) {
                 if (pieChart) {
                     pieChart.destroy();
@@ -345,7 +351,7 @@
             toggleChart.textContent = chartExpanded ? 'Ocultar grafico' : 'Ver grafico';
 
             // Grafico solo para moneda base y gastos
-            const filteredForChart = monthExpenses.filter(e => e.currency === baseCurrency && e.amount < 0);
+            const filteredForChart = monthExpenses.filter(e => (e.currency || baseCurrency) === baseCurrency && resolveFlow(e) === 'expense');
             if (filteredForChart.length === 0) {
                 if (pieChart) { pieChart.destroy(); pieChart = null; }
                 chartContainer.style.display = 'none';
@@ -378,18 +384,26 @@
             const cashflowExpenses = expenses.filter(exp => (exp.source || '').toUpperCase() !== 'TARJETA');
             const byCurrency = cashflowExpenses.reduce((acc, exp) => {
                 const cur = exp.currency || baseCurrency;
-                acc[cur] = acc[cur] || { income: 0, expense: 0 };
-                if (exp.amount > 0) acc[cur].income += exp.amount;
+                acc[cur] = acc[cur] || { income: 0, expense: 0, refund: 0 };
+                const flow = resolveFlow(exp);
+                if (flow === 'income') acc[cur].income += Math.abs(exp.amount);
+                else if (flow === 'refund') acc[cur].refund += Math.abs(exp.amount);
                 else acc[cur].expense += Math.abs(exp.amount);
                 return acc;
             }, {});
 
             const baseData = byCurrency[baseCurrency];
-            const baseHasValue = baseData && (baseData.income !== 0 || baseData.expense !== 0);
+            const baseHasValue = baseData && (baseData.income !== 0 || baseData.expense !== 0 || baseData.refund !== 0);
             if (baseHasValue) {
                 const baseWrapper = document.createElement('div');
                 baseWrapper.className = 'cashflow-row base-currency';
-                const balance = baseData.income - baseData.expense;
+                const balance = baseData.income + baseData.refund - baseData.expense;
+                const refundBlock = baseData.refund ? `
+                    <div class="cashflow-item refund">
+                        <div class="cashflow-label">Reintegros ${baseCurrency.toUpperCase()}</div>
+                        <div class="cashflow-value">${formatCurrencyWithCurrency(baseData.refund, baseCurrency)}</div>
+                    </div>
+                ` : '';
                 baseWrapper.innerHTML = `
                     <div class="cashflow-item income">
                         <div class="cashflow-label">Ingresos ${baseCurrency.toUpperCase()}</div>
@@ -399,6 +413,7 @@
                         <div class="cashflow-label">Gastos ${baseCurrency.toUpperCase()}</div>
                         <div class="cashflow-value">${formatCurrencyWithCurrency(baseData.expense, baseCurrency)}</div>
                     </div>
+                    ${refundBlock}
                     <div class="cashflow-item balance">
                         <div class="cashflow-label">Balance ${baseCurrency.toUpperCase()}</div>
                         <div class="cashflow-value ${balance >= 0 ? 'positive' : 'negative'}">${formatCurrencyWithCurrency(balance, baseCurrency)}</div>
@@ -411,10 +426,11 @@
             supportedCurrencies.filter(cur => cur !== baseCurrency).forEach(cur => {
                 const data = byCurrency[cur];
                 if (!data) return;
-                const balance = data.income - data.expense;
-                if (balance === 0 && data.income === 0 && data.expense === 0) return;
+                const balance = data.income + data.refund - data.expense;
+                if (balance === 0 && data.income === 0 && data.expense === 0 && data.refund === 0) return;
                 const row = document.createElement('div');
                 row.className = 'cashflow-row';
+                const refundLine = data.refund ? `<span>Reintegros: ${formatCurrencyWithCurrency(data.refund, cur)}</span>` : '';
                 row.innerHTML = `
                     <div class="cashflow-item balance">
                         <div class="cashflow-label">Balance ${cur.toUpperCase()}</div>
@@ -422,6 +438,7 @@
                         <div class="cashflow-sub">
                             <span>Ingresos: ${formatCurrencyWithCurrency(data.income, cur)}</span>
                             <span>Gastos: ${formatCurrencyWithCurrency(data.expense, cur)}</span>
+                            ${refundLine}
                         </div>
                     </div>
                 `;
@@ -486,9 +503,9 @@
         function updateLegend(categoryData) {
             const legendContainer = document.getElementById('customLegend');
             legendContainer.innerHTML = '';
-            const monthExpenses = getMonthExpenses(allExpenses).filter(exp => exp.currency === baseCurrency);
+            const monthExpenses = getMonthExpenses(allExpenses).filter(exp => (exp.currency || baseCurrency) === baseCurrency);
             const currentMonthCategories = [...new Set(monthExpenses
-                .filter(exp => exp.amount < 0)
+                .filter(exp => resolveFlow(exp) === 'expense')
                 .map(exp => exp.category))];
             const categoryMap = new Map(categoryData.map(cat => [cat.category, cat]));
             
@@ -518,7 +535,7 @@
             });
 
             const activeTotalExpenses = monthExpenses
-                .filter(exp => exp.amount < 0 && !disabledCategories.has(exp.category))
+                .filter(exp => resolveFlow(exp) === 'expense' && !disabledCategories.has(exp.category))
                 .reduce((sum, exp) => sum + Math.abs(exp.amount), 0);
 
             const totalsHtml = `
@@ -571,6 +588,7 @@
                     currency: exp.currency || baseCurrency,
                     source: exp.source || '',
                     card: exp.card || '',
+                    flow: resolveFlow(exp),
                 }));
 
                 allTags.clear();
@@ -728,10 +746,12 @@
 
         document.getElementById('expenseForm').addEventListener('submit', async (e) => {
             e.preventDefault();
-            const isGain = document.getElementById('reportGain').checked;
+            const movementType = movementTypeSelect ? movementTypeSelect.value : 'expense';
             let amount = parseFloat(document.getElementById('amount').value);
-            if (!isGain) {
+            if (movementType === 'expense') {
                 amount *= -1;
+            } else {
+                amount = Math.abs(amount);
             }
             const sourceValue = sourceSelect.value || 'CA';
             if (sourceValue === 'TARJETA' && !document.getElementById('cardInput').value.trim()) {
@@ -747,6 +767,7 @@
                 currency: document.getElementById('currencySelectForm').value || currentCurrency,
                 source: sourceValue,
                 card: sourceValue === 'TARJETA' ? document.getElementById('cardInput').value : '',
+                flow: movementType,
             };
             try {
                 const response = await fetch('/expense', {
@@ -764,6 +785,7 @@
                 selectedTags.clear();
                 populateFormCurrency();
                 sourceSelect.value = 'CA';
+                if (movementTypeSelect) movementTypeSelect.value = 'expense';
                 toggleCardInput();
                 const toggleBtn = document.getElementById('toggleExpenseFormBtn');
                 if (toggleBtn && toggleBtn.dataset.action === 'open-form') {
@@ -837,13 +859,16 @@
                 }
                 formContainer.style.display = 'block';
                 if (action === 'income') {
-                    document.getElementById('reportGain').checked = true;
+                    if (movementTypeSelect) movementTypeSelect.value = 'income';
+                    sourceSelect.value = 'CA';
+                } else if (action === 'refund') {
+                    if (movementTypeSelect) movementTypeSelect.value = 'refund';
                     sourceSelect.value = 'CA';
                 } else if (action === 'expense') {
-                    document.getElementById('reportGain').checked = false;
+                    if (movementTypeSelect) movementTypeSelect.value = 'expense';
                     sourceSelect.value = 'CA';
                 } else if (action === 'card-expense') {
-                    document.getElementById('reportGain').checked = false;
+                    if (movementTypeSelect) movementTypeSelect.value = 'expense';
                     sourceSelect.value = 'TARJETA';
                 }
                 toggleCardInput();

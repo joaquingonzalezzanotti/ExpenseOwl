@@ -844,6 +844,10 @@ input:focus-visible {
     background-color: rgba(251, 191, 36, 0.1);
 }
 
+.cashflow-item.refund {
+    background-color: rgba(59, 130, 246, 0.12);
+}
+
 .cashflow-label {
     font-size: 0.9rem;
     color: var(--text-secondary);

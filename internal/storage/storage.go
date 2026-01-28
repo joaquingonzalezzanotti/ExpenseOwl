@@ -84,6 +84,7 @@ type Session struct {
 
 type RecurringExpense struct {
 	UserID      string    `json:"-"`
+	Flow        string    `json:"flow"`
 	ID          string    `json:"id"`
 	Name        string    `json:"name"`
 	Amount      float64   `json:"amount"`
@@ -115,6 +116,7 @@ type SystemConfig struct {
 // expense struct
 type Expense struct {
 	UserID      string    `json:"-"`
+	Flow        string    `json:"flow"`
 	ID          string    `json:"id"`
 	RecurringID string    `json:"recurringID"`
 	Name        string    `json:"name"`

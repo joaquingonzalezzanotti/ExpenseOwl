@@ -193,6 +193,14 @@ func (h *Handler) ImportCSV(w http.ResponseWriter, r *http.Request) {
 			Date:     date,
 			Tags:     tags,
 		}
+		flow, adjustedAmount, err := normalizeFlow("", expense.Amount)
+		if err != nil {
+			log.Printf("Warning: Skipping row %d due to invalid flow: %v\n", i+2, err)
+			skippedCount++
+			continue
+		}
+		expense.Flow = flow
+		expense.Amount = adjustedAmount
 		if err := expense.Validate(); err != nil {
 			log.Printf("Warning: Skipping row %d due to validation error: %v\n", i+2, err)
 			skippedCount++
@@ -314,6 +322,14 @@ func (h *Handler) ImportOldCSV(w http.ResponseWriter, r *http.Request) {
 			Amount:   amountUpdated,
 			Date:     date,
 		}
+		flow, adjustedAmount, err := normalizeFlow("", expense.Amount)
+		if err != nil {
+			log.Printf("Warning: Skipping row %d due to invalid flow: %v\n", i+2, err)
+			skippedCount++
+			continue
+		}
+		expense.Flow = flow
+		expense.Amount = adjustedAmount
 		if err := expense.Validate(); err != nil {
 			log.Printf("Warning: Skipping row %d due to validation error: %v\n", i+2, err)
 			skippedCount++
