@@ -34,6 +34,9 @@
                 <a href="/settings" class="view-button" data-tooltip="Configuracion">
                     <i class="fa-solid fa-gear"></i>
                 </a>
+                <button id="logoutButton" class="view-button" data-tooltip="Salir" type="button">
+                    <i class="fa-solid fa-right-from-bracket"></i>
+                </button>
             </div>
         </header>
 
@@ -138,6 +141,50 @@
                 <button class="modal-button" onclick="closeDeleteModal()">Cancelar</button>
                 <button class="modal-button confirm" onclick="confirmDelete()">Eliminar</button>
             </div>
+        </div>
+    </div>
+
+    <div id="authOverlay" class="auth-overlay hidden" aria-hidden="true">
+        <div class="auth-panel">
+            <div class="auth-header">
+                <h2>ExpenseLog</h2>
+                <p>Inicia sesion para continuar</p>
+            </div>
+            <div class="auth-tabs">
+                <button class="auth-tab active" type="button" data-auth-tab="login">Ingresar</button>
+                <button class="auth-tab" type="button" data-auth-tab="register">Crear cuenta</button>
+            </div>
+            <div id="authMessage" class="form-message"></div>
+            <form id="authLoginForm" class="auth-form active" data-auth-form="login">
+                <div class="form-group">
+                    <label for="authLoginEmail">Email</label>
+                    <input type="email" id="authLoginEmail" autocomplete="email" required>
+                </div>
+                <div class="form-group">
+                    <label for="authLoginPassword">Contrasena</label>
+                    <input type="password" id="authLoginPassword" autocomplete="current-password" required>
+                </div>
+                <label class="auth-remember">
+                    <input type="checkbox" id="authLoginRemember" class="styled-checkbox">
+                    Recordarme
+                </label>
+                <button type="submit" class="nav-button">Ingresar</button>
+            </form>
+            <form id="authRegisterForm" class="auth-form" data-auth-form="register">
+                <div class="form-group">
+                    <label for="authRegisterEmail">Email</label>
+                    <input type="email" id="authRegisterEmail" autocomplete="email" required>
+                </div>
+                <div class="form-group">
+                    <label for="authRegisterPassword">Contrasena (min 8)</label>
+                    <input type="password" id="authRegisterPassword" autocomplete="new-password" required>
+                </div>
+                <label class="auth-remember">
+                    <input type="checkbox" id="authRegisterRemember" class="styled-checkbox">
+                    Recordarme
+                </label>
+                <button type="submit" class="nav-button">Crear cuenta</button>
+            </form>
         </div>
     </div>
 
@@ -586,7 +633,7 @@
                 showToast('No se pudo guardar el gasto', 'error');
             }
         });
-        document.addEventListener('DOMContentLoaded', initialize);
+        document.addEventListener('DOMContentLoaded', guardAppInit(initialize));
 
         document.getElementById('name').addEventListener('click', (e) => {
             if (e.target.value === '-') {

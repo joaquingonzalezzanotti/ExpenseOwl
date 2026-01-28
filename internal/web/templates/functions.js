@@ -9,6 +9,168 @@ const currencyBehaviors = {
     eur: {symbol: "EUR", useComma: true, useDecimals: true, useSpace: false, right: false},
 };
 
+let authChecked = false;
+
+async function checkAuthStatus() {
+    const overlay = document.getElementById('authOverlay');
+    if (!overlay) return null;
+    try {
+        const res = await fetch('/auth/me');
+        if (res.ok) {
+            const user = await res.json();
+            hideAuthOverlay();
+            authChecked = true;
+            return user;
+        }
+        if (res.status === 401) {
+            showAuthOverlay();
+            authChecked = true;
+            return null;
+        }
+        showAuthOverlay('No se pudo validar la sesion');
+    } catch (error) {
+        console.error('Auth check failed:', error);
+        showAuthOverlay('No se pudo validar la sesion');
+    }
+    authChecked = true;
+    return null;
+}
+
+function guardAppInit(initFn) {
+    return async () => {
+        const user = await checkAuthStatus();
+        if (!user) return;
+        if (typeof initFn === 'function') {
+            await initFn();
+        }
+    };
+}
+
+function showAuthOverlay(message) {
+    const overlay = document.getElementById('authOverlay');
+    if (!overlay) return;
+    overlay.classList.remove('hidden');
+    overlay.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('auth-locked');
+    const msg = document.getElementById('authMessage');
+    if (msg) {
+        msg.textContent = message || '';
+        msg.className = message ? 'form-message error' : 'form-message';
+    }
+}
+
+function hideAuthOverlay() {
+    const overlay = document.getElementById('authOverlay');
+    if (!overlay) return;
+    overlay.classList.add('hidden');
+    overlay.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('auth-locked');
+}
+
+function setAuthTab(tab) {
+    const tabs = document.querySelectorAll('.auth-tab');
+    const forms = document.querySelectorAll('.auth-form');
+    tabs.forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.authTab === tab);
+    });
+    forms.forEach(form => {
+        form.classList.toggle('active', form.dataset.authForm === tab);
+    });
+}
+
+function setupAuthUI() {
+    const overlay = document.getElementById('authOverlay');
+    if (!overlay || overlay.dataset.bound === 'true') return;
+    overlay.dataset.bound = 'true';
+
+    const tabs = document.querySelectorAll('.auth-tab');
+    tabs.forEach(tab => {
+        tab.addEventListener('click', () => setAuthTab(tab.dataset.authTab));
+    });
+
+    const loginForm = document.getElementById('authLoginForm');
+    if (loginForm) {
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('authLoginEmail').value.trim();
+            const password = document.getElementById('authLoginPassword').value;
+            const remember = !!document.getElementById('authLoginRemember')?.checked;
+            try {
+                const response = await fetch('/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password, remember }),
+                });
+                if (!response.ok) {
+                    const error = await response.json().catch(() => ({}));
+                    showAuthOverlay(error.error || 'No se pudo iniciar sesion');
+                    return;
+                }
+                hideAuthOverlay();
+                window.location.reload();
+            } catch (error) {
+                console.error('Login failed:', error);
+                showAuthOverlay('No se pudo iniciar sesion');
+            }
+        });
+    }
+
+    const registerForm = document.getElementById('authRegisterForm');
+    if (registerForm) {
+        registerForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('authRegisterEmail').value.trim();
+            const password = document.getElementById('authRegisterPassword').value;
+            const remember = !!document.getElementById('authRegisterRemember')?.checked;
+            try {
+                const response = await fetch('/auth/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password, remember }),
+                });
+                if (!response.ok) {
+                    const error = await response.json().catch(() => ({}));
+                    showAuthOverlay(error.error || 'No se pudo registrar');
+                    return;
+                }
+                hideAuthOverlay();
+                window.location.reload();
+            } catch (error) {
+                console.error('Register failed:', error);
+                showAuthOverlay('No se pudo registrar');
+            }
+        });
+    }
+
+    const logoutButton = document.getElementById('logoutButton');
+    if (logoutButton) {
+        logoutButton.addEventListener('click', async () => {
+            try {
+                await fetch('/auth/logout', { method: 'POST' });
+            } catch (error) {
+                console.error('Logout failed:', error);
+            } finally {
+                showAuthOverlay();
+                window.location.reload();
+            }
+        });
+    }
+
+    setAuthTab('login');
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    setupAuthUI();
+    if (!authChecked) {
+        checkAuthStatus();
+    }
+});
+
+window.addEventListener('focus', () => {
+    if (!document.getElementById('authOverlay')) return;
+    checkAuthStatus();
+});
+
 function formatCurrency(amount) {
     const behavior = currencyBehaviors[currentCurrency] || {
         symbol: "$",

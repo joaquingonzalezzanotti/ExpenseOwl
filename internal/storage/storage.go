@@ -11,33 +11,45 @@ import (
 // Storage interface for all storage types
 type Storage interface {
 	Close() error
-	GetConfig() (*Config, error)
+
+	// Users
+	CreateUser(email, passwordHash string) (User, error)
+	GetUserByEmail(email string) (User, error)
+	GetUserByID(id string) (User, error)
+
+	// Sessions
+	CreateSession(session Session) error
+	GetSession(id string) (Session, error)
+	DeleteSession(id string) error
+
+	// User Config
+	GetConfig(userID string) (*Config, error)
 
 	// Basic Config Updates
-	GetCategories() ([]string, error)
-	UpdateCategories(categories []string) error
+	GetCategories(userID string) ([]string, error)
+	UpdateCategories(userID string, categories []string) error
 	// GetTags() ([]string, error)
 	// UpdateTags(tags []string) error
-	GetCurrency() (string, error)
-	UpdateCurrency(currency string) error
-	GetStartDate() (int, error)
-	UpdateStartDate(startDate int) error
+	GetCurrency(userID string) (string, error)
+	UpdateCurrency(userID string, currency string) error
+	GetStartDate(userID string) (int, error)
+	UpdateStartDate(userID string, startDate int) error
 
 	// Recurring Expenses
-	GetRecurringExpenses() ([]RecurringExpense, error)
-	GetRecurringExpense(id string) (RecurringExpense, error)
-	AddRecurringExpense(recurringExpense RecurringExpense) error
-	RemoveRecurringExpense(id string, removeAll bool) error
-	UpdateRecurringExpense(id string, recurringExpense RecurringExpense, updateAll bool) error
+	GetRecurringExpenses(userID string) ([]RecurringExpense, error)
+	GetRecurringExpense(userID, id string) (RecurringExpense, error)
+	AddRecurringExpense(userID string, recurringExpense RecurringExpense) error
+	RemoveRecurringExpense(userID, id string, removeAll bool) error
+	UpdateRecurringExpense(userID, id string, recurringExpense RecurringExpense, updateAll bool) error
 
 	// Expenses
-	GetAllExpenses() ([]Expense, error)
-	GetExpense(id string) (Expense, error)
-	AddExpense(expense Expense) error
-	RemoveExpense(id string) error
-	AddMultipleExpenses(expenses []Expense) error
-	RemoveMultipleExpenses(ids []string) error
-	UpdateExpense(id string, expense Expense) error
+	GetAllExpenses(userID string) ([]Expense, error)
+	GetExpense(userID, id string) (Expense, error)
+	AddExpense(userID string, expense Expense) error
+	RemoveExpense(userID, id string) error
+	AddMultipleExpenses(userID string, expenses []Expense) error
+	RemoveMultipleExpenses(userID string, ids []string) error
+	UpdateExpense(userID, id string, expense Expense) error
 
 	// Potential Future Feature: Multi-currency
 	// GetConversions() (map[string]float64, error)
@@ -53,7 +65,25 @@ type Config struct {
 	// Tags              []string           `json:"tags"`
 }
 
+type User struct {
+	ID           string    `json:"id"`
+	Email        string    `json:"email"`
+	PasswordHash string    `json:"-"`
+	Status       string    `json:"status"`
+	CreatedAt    time.Time `json:"createdAt"`
+}
+
+type Session struct {
+	ID        string    `json:"id"`
+	UserID    string    `json:"userId"`
+	CreatedAt time.Time `json:"createdAt"`
+	ExpiresAt time.Time `json:"expiresAt"`
+	IP        string    `json:"ip"`
+	UserAgent string    `json:"userAgent"`
+}
+
 type RecurringExpense struct {
+	UserID      string    `json:"-"`
 	ID          string    `json:"id"`
 	Name        string    `json:"name"`
 	Amount      float64   `json:"amount"`
@@ -84,6 +114,7 @@ type SystemConfig struct {
 
 // expense struct
 type Expense struct {
+	UserID      string    `json:"-"`
 	ID          string    `json:"id"`
 	RecurringID string    `json:"recurringID"`
 	Name        string    `json:"name"`
@@ -259,7 +290,7 @@ var defaultCategories = []string{
 }
 
 var SupportedCurrencies = []string{
-    "ars", // Argentine Peso
-    "usd", // US Dollar
-    "eur", // Euro
+	"ars", // Argentine Peso
+	"usd", // US Dollar
+	"eur", // Euro
 }

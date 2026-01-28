@@ -58,37 +58,43 @@ func runServer(port int) {
 	http.HandleFunc("/fa.min.css", handler.ServeStaticFile)
 	http.HandleFunc("/webfonts/", handler.ServeStaticFile)
 
+	// Auth
+	http.HandleFunc("/auth/register", handler.AuthRegister)
+	http.HandleFunc("/auth/login", handler.AuthLogin)
+	http.HandleFunc("/auth/logout", handler.AuthLogout)
+	http.HandleFunc("/auth/me", handler.RequireAuth(handler.AuthMe))
+
 	// Config
-	http.HandleFunc("/config", handler.GetConfig)
-	http.HandleFunc("/categories", handler.GetCategories)
-	http.HandleFunc("/categories/edit", handler.UpdateCategories)
-	http.HandleFunc("/categories/add", handler.AddCategory)
-	http.HandleFunc("/categories/rename", handler.RenameCategory)
-	http.HandleFunc("/categories/delete", handler.DeleteCategory)
-	http.HandleFunc("/currency", handler.GetCurrency)
-	http.HandleFunc("/currency/edit", handler.UpdateCurrency)
-	http.HandleFunc("/startdate", handler.GetStartDate)
-	http.HandleFunc("/startdate/edit", handler.UpdateStartDate)
+	http.HandleFunc("/config", handler.RequireAuth(handler.GetConfig))
+	http.HandleFunc("/categories", handler.RequireAuth(handler.GetCategories))
+	http.HandleFunc("/categories/edit", handler.RequireAuth(handler.UpdateCategories))
+	http.HandleFunc("/categories/add", handler.RequireAuth(handler.AddCategory))
+	http.HandleFunc("/categories/rename", handler.RequireAuth(handler.RenameCategory))
+	http.HandleFunc("/categories/delete", handler.RequireAuth(handler.DeleteCategory))
+	http.HandleFunc("/currency", handler.RequireAuth(handler.GetCurrency))
+	http.HandleFunc("/currency/edit", handler.RequireAuth(handler.UpdateCurrency))
+	http.HandleFunc("/startdate", handler.RequireAuth(handler.GetStartDate))
+	http.HandleFunc("/startdate/edit", handler.RequireAuth(handler.UpdateStartDate))
 	// http.HandleFunc("/tags", handler.GetTags)
 	// http.HandleFunc("/tags/edit", handler.UpdateTags)
 
 	// Expenses
-	http.HandleFunc("/expense", handler.AddExpense)                     // PUT for add
-	http.HandleFunc("/expenses", handler.GetExpenses)                   // GET all
-	http.HandleFunc("/expense/edit", handler.EditExpense)               // PUT for edit
-	http.HandleFunc("/expense/delete", handler.DeleteExpense)           // DELETE for single
-	http.HandleFunc("/expenses/delete", handler.DeleteMultipleExpenses) // DELETE for multiple
+	http.HandleFunc("/expense", handler.RequireAuth(handler.AddExpense))                     // PUT for add
+	http.HandleFunc("/expenses", handler.RequireAuth(handler.GetExpenses))                   // GET all
+	http.HandleFunc("/expense/edit", handler.RequireAuth(handler.EditExpense))               // PUT for edit
+	http.HandleFunc("/expense/delete", handler.RequireAuth(handler.DeleteExpense))           // DELETE for single
+	http.HandleFunc("/expenses/delete", handler.RequireAuth(handler.DeleteMultipleExpenses)) // DELETE for multiple
 
 	// Recurring Expenses
-	http.HandleFunc("/recurring-expense", handler.AddRecurringExpense)           // PUT for add
-	http.HandleFunc("/recurring-expenses", handler.GetRecurringExpenses)         // GET all
-	http.HandleFunc("/recurring-expense/edit", handler.UpdateRecurringExpense)   // PUT for edit
-	http.HandleFunc("/recurring-expense/delete", handler.DeleteRecurringExpense) // DELETE
+	http.HandleFunc("/recurring-expense", handler.RequireAuth(handler.AddRecurringExpense))           // PUT for add
+	http.HandleFunc("/recurring-expenses", handler.RequireAuth(handler.GetRecurringExpenses))         // GET all
+	http.HandleFunc("/recurring-expense/edit", handler.RequireAuth(handler.UpdateRecurringExpense))   // PUT for edit
+	http.HandleFunc("/recurring-expense/delete", handler.RequireAuth(handler.DeleteRecurringExpense)) // DELETE
 
 	// Import/Export
-	http.HandleFunc("/export/csv", handler.ExportCSV)
-	http.HandleFunc("/import/csv", handler.ImportCSV)
-	http.HandleFunc("/import/csvold", handler.ImportOldCSV)
+	http.HandleFunc("/export/csv", handler.RequireAuth(handler.ExportCSV))
+	http.HandleFunc("/import/csv", handler.RequireAuth(handler.ImportCSV))
+	http.HandleFunc("/import/csvold", handler.RequireAuth(handler.ImportOldCSV))
 
 	log.Println("Starting server on port", port, "...")
 	if err := http.ListenAndServe(fmt.Sprint(":", port), nil); err != nil {

@@ -24,10 +24,10 @@ func TestPostgresStoreCRUD(t *testing.T) {
 	}
 	dbName := parsed.Path[1:]
 
-	user := ""
+	dbUser := ""
 	pass := ""
 	if parsed.User != nil {
-		user = parsed.User.Username()
+		dbUser = parsed.User.Username()
 		pass, _ = parsed.User.Password()
 	}
 
@@ -39,7 +39,7 @@ func TestPostgresStoreCRUD(t *testing.T) {
 	baseConfig := SystemConfig{
 		StorageURL:  host + "/" + dbName,
 		StorageType: BackendTypePostgres,
-		StorageUser: user,
+		StorageUser: dbUser,
 		StoragePass: pass,
 		StorageSSL:  sslMode,
 	}
@@ -50,6 +50,15 @@ func TestPostgresStoreCRUD(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = store.Close() })
 
+	hash, err := HashPassword("testpassword")
+	if err != nil {
+		t.Fatalf("hash password: %v", err)
+	}
+	user, err := store.CreateUser("test+"+time.Now().Format("20060102150405")+"@example.com", hash)
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
 	expense := Expense{
 		Name:     "PG-Test",
 		Category: "Test",
@@ -58,10 +67,10 @@ func TestPostgresStoreCRUD(t *testing.T) {
 		Date:     time.Now(),
 	}
 
-	if err := store.AddExpense(expense); err != nil {
+	if err := store.AddExpense(user.ID, expense); err != nil {
 		t.Fatalf("add expense: %v", err)
 	}
-	all, err := store.GetAllExpenses()
+	all, err := store.GetAllExpenses(user.ID)
 	if err != nil {
 		t.Fatalf("get all: %v", err)
 	}
@@ -71,11 +80,11 @@ func TestPostgresStoreCRUD(t *testing.T) {
 
 	saved := all[0]
 	saved.Amount = -75
-	if err := store.UpdateExpense(saved.ID, saved); err != nil {
+	if err := store.UpdateExpense(user.ID, saved.ID, saved); err != nil {
 		t.Fatalf("update expense: %v", err)
 	}
 
-	if err := store.RemoveExpense(saved.ID); err != nil {
+	if err := store.RemoveExpense(user.ID, saved.ID); err != nil {
 		t.Fatalf("remove expense: %v", err)
 	}
 }

@@ -51,6 +51,13 @@ body {
         radial-gradient(circle at 85% 15%, rgba(251, 191, 36, 0.1), transparent 40%);
 }
 
+body.auth-locked .container {
+    pointer-events: none;
+    user-select: none;
+    opacity: 0.35;
+    filter: blur(1px);
+}
+
 .container {
     max-width: 1200px;
     margin: 0 auto;
@@ -420,6 +427,92 @@ input:focus-visible {
     pointer-events: none;
     opacity: 0;
     animation: tooltip-appear 0.1s ease forwards;
+}
+
+.auth-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(6, 12, 24, 0.78);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+    z-index: 10000;
+    backdrop-filter: blur(6px);
+}
+
+.auth-overlay.hidden {
+    display: none;
+}
+
+.auth-panel {
+    width: 100%;
+    max-width: 420px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 1.5rem;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.35);
+}
+
+.auth-header {
+    text-align: center;
+    margin-bottom: 1rem;
+}
+
+.auth-header h2 {
+    margin: 0 0 0.25rem 0;
+    font-size: 1.6rem;
+}
+
+.auth-header p {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+}
+
+.auth-tabs {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.auth-tab {
+    flex: 1;
+    border: 1px solid var(--border);
+    background: var(--bg-primary);
+    color: var(--text-secondary);
+    padding: 0.45rem 0.75rem;
+    border-radius: 999px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: all 0.2s ease;
+}
+
+.auth-tab.active {
+    background: var(--accent);
+    color: var(--text-primary);
+}
+
+.auth-form {
+    display: none;
+    gap: 0.75rem;
+}
+
+.auth-form.active {
+    display: grid;
+}
+
+.auth-remember {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+.auth-remember input {
+    accent-color: var(--accent);
 }
 
 @keyframes tooltip-appear {
