@@ -20,14 +20,20 @@ export const parseModoReceipt = (text, aliases, telegramMeta) => {
         ?? paymentMethodRaw;
     const cbu = pick(clean, /CBU\/CVU\s+(\d{10,22})/i);
     const aliasNorm = aliases.map((a) => normalizeName(a));
-    const srcIsMine = source && aliasNorm.includes(normalizeName(source));
-    const dstIsMine = dest && aliasNorm.includes(normalizeName(dest));
+    const sourceNorm = normalizeName(source);
+    const destNorm = normalizeName(dest);
+    const srcIsMine = source && aliasNorm.includes(sourceNorm);
+    const dstIsMine = dest && aliasNorm.includes(destNorm);
     const paidToNorm = normalizeName(paidTo);
     const paidToIsMine = paidToNorm ? aliasNorm.includes(paidToNorm) : false;
     const hasDirectionalTransferLayout = Boolean(source && dest && fromAcc && toAcc);
+    const samePartyTransfer = Boolean(sourceNorm && destNorm && sourceNorm === destNorm);
     let type;
     let typeConfidence = 0.2;
     const warnings = [];
+    if (samePartyTransfer) {
+        warnings.push('Transferencia ambigua: origen y destino parecen ser la misma persona.');
+    }
     if (paidTo && !paidToIsMine) {
         type = 'expense';
         typeConfidence = 0.92;
@@ -46,7 +52,7 @@ export const parseModoReceipt = (text, aliases, telegramMeta) => {
     }
     // For receipts like "Transferencia de X ... Para Y ...", if aliases are missing,
     // infer expense from the directional layout instead of leaving type undefined.
-    if (!type && hasDirectionalTransferLayout) {
+    if (!type && hasDirectionalTransferLayout && !samePartyTransfer) {
         type = 'expense';
         typeConfidence = 0.72;
         warnings.push('Tipo inferido por estructura de transferencia (sin alias).');

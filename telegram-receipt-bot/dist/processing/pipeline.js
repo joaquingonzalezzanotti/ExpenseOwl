@@ -31,6 +31,10 @@ const shouldTriggerAIFallback = (nativeParsed) => {
     if (!canUseAIParser()) {
         return { tryFallback: false, reason: 'ai_parser_disabled' };
     }
+    if (Array.isArray(nativeParsed?.warnings) &&
+        nativeParsed.warnings.some((warning) => String(warning || '').toLowerCase().includes('transferencia ambigua'))) {
+        return { tryFallback: false, reason: 'ambiguous_self_transfer' };
+    }
     if (!hasRequiredFields(nativeParsed)) {
         return { tryFallback: true, reason: 'missing_required_fields' };
     }
