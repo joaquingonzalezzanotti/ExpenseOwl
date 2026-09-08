@@ -419,7 +419,13 @@
         function isIncomeForAnalysis(expense) {
             const flow = resolveFlow(expense);
             const systemOrigin = String(expense?.systemOrigin || expense?.system_origin || '').trim().toLowerCase();
-            return (flow === 'income' || flow === 'refund') && Number(expense.amount) > 0 && systemOrigin !== 'reconciliation_reversal';
+            return flow === 'income' && Number(expense.amount) > 0 && systemOrigin !== 'reconciliation_reversal';
+        }
+
+        function isRefundForAnalysis(expense) {
+            const flow = resolveFlow(expense);
+            const systemOrigin = String(expense?.systemOrigin || expense?.system_origin || '').trim().toLowerCase();
+            return flow === 'refund' && Number(expense.amount) > 0 && systemOrigin !== 'reconciliation_reversal';
         }
 
         function isCardPurchaseMovement(expense) {
@@ -451,7 +457,7 @@
         function getFilteredMonthMovements() {
             const monthExpenses = getCurrentMonthExpenses();
             return monthExpenses.filter((expense) => {
-                if (!isExpenseForAnalysis(expense) && !isIncomeForAnalysis(expense)) return false;
+                if (!isExpenseForAnalysis(expense) && !isIncomeForAnalysis(expense) && !isRefundForAnalysis(expense)) return false;
                 const currency = (expense.currency || currentCurrency).toLowerCase();
                 if (filterCurrency !== 'all' && currency !== filterCurrency) return false;
                 const normalizedSource = normalizeSourceCode(expense.source || 'CA');
@@ -1144,7 +1150,7 @@
                 allExpenses = allExpenses.map((expense) => ({
                     ...expense,
                     currency: (expense.currency || currentCurrency).toLowerCase(),
-                    source: expense.source || 'CA',
+                    source: expense.source || '',
                 }));
 
                 updateMonthDisplay();

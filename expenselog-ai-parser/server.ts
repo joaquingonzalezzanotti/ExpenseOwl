@@ -48,7 +48,7 @@ const ConfidenceSchema = z.object({
 const TransactionSchema = z.object({
   type: z.enum(["income", "expense", "refund"]).optional(),
   amount: z.number().finite().optional(),
-  currency: z.literal("ARS").optional(),
+  currency: z.enum(["ARS", "USD", "EUR"]).optional(),
   datetime_iso: z
     .string()
     .optional()
@@ -178,7 +178,7 @@ Tu tarea es extraer datos estructurados a partir de:
 
 REGLAS CRITICAS:
 1. No inventes datos. Si un dato no esta claro, usa "" y agrega ese campo en missing_required.
-2. Moneda: siempre "ARS".
+2. Moneda: conserva monedas explicitas del usuario/comprobante. Soporta "ARS", "USD" y "EUR". No conviertas montos. Si no hay moneda explicita, usa "ARS".
 3. Zona horaria: America/Argentina/Buenos_Aires (UTC-3).
 4. Fecha de referencia "hoy": ${referenceDateISO}
    - ayer: ${y1}
@@ -191,14 +191,15 @@ REGLAS CRITICAS:
 6. type:
    - expense: pagos, transferencias enviadas, compras.
    - income: transferencias recibidas, depositos, sueldos.
+   - refund: reintegros, devoluciones, cashback. Es entrada de caja pero no ingreso de negocio.
 7. amount debe ser numero distinto de 0.
 8. Responde SOLO JSON valido, sin markdown ni texto extra.
 
 CONTRATO DE SALIDA:
 {
-  "type": "income" | "expense",
+  "type": "income" | "expense" | "refund",
   "amount": number,
-  "currency": "ARS",
+  "currency": "ARS" | "USD" | "EUR",
   "datetime_iso": "YYYY-MM-DDTHH:mm:ss-03:00",
   "counterparty": "Nombre de persona o comercio",
   "reference": "Opcional",
@@ -278,6 +279,25 @@ function normalizeAmount(raw: unknown): number | undefined {
   const parsed = Number(cleaned);
   if (!Number.isFinite(parsed)) return undefined;
   return parsed;
+}
+
+function normalizeCurrency(raw: unknown, inputText?: string): "ARS" | "USD" | "EUR" {
+  const explicit = normalizeForMatch(raw);
+  if (explicit === "usd" || explicit === "us$" || explicit === "u$s" || explicit === "dolar" || explicit === "dolares" || explicit === "dólar" || explicit === "dólares") {
+    return "USD";
+  }
+  if (explicit === "eur" || explicit === "euro" || explicit === "euros") {
+    return "EUR";
+  }
+  if (explicit === "ars" || explicit === "peso" || explicit === "pesos") {
+    return "ARS";
+  }
+
+  const text = normalizeForMatch(inputText);
+  if (text.includes("us$") || text.includes("u$s") || /\b(usd|dolar(?:es)?|dólar(?:es)?)\b/.test(text)) return "USD";
+  if (/\b(eur|euro(?:s)?)\b/.test(text)) return "EUR";
+  if (/\b(ars|peso(?:s)?)\b/.test(text)) return "ARS";
+  return "ARS";
 }
 
 function inferTypeFromText(text?: string): "income" | "expense" | "refund" | undefined {
@@ -390,7 +410,7 @@ function normalizeModelOutput(raw: unknown, inputText: string | undefined, conte
   return {
     type,
     amount,
-    currency: "ARS",
+    currency: normalizeCurrency(source.currency ?? source.moneda, inputText),
     datetime_iso: datetimeISO,
     counterparty,
     reference: pickFirstNonEmptyString(source.reference, source.ref, source.operation_id, source.comprobante),

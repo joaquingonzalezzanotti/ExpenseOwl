@@ -323,8 +323,8 @@ func normalizeBotExpenseSource(provider string) string {
 		"Ñ", "N",
 	).Replace(clean)
 	switch {
-	case clean == "":
-		return "CA"
+	case clean == "", clean == "UNKNOWN", clean == "DESCONOCIDO", clean == "NO ESPECIFICADO":
+		return ""
 	case strings.Contains(clean, "EFECTIVO"), strings.Contains(clean, "CASH"):
 		return "EFECTIVO"
 	case strings.Contains(clean, "DEBITO"),

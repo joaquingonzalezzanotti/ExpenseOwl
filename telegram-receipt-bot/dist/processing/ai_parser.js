@@ -25,6 +25,16 @@ const normalizeType = (value) => {
         return 'expense';
     return undefined;
 };
+const normalizeCurrency = (value) => {
+    const normalized = String(value ?? '').trim().toUpperCase();
+    if (['USD', 'US$', 'U$S'].includes(normalized))
+        return 'USD';
+    if (['EUR', '€'].includes(normalized))
+        return 'EUR';
+    if (['ARS', '$', 'PESO', 'PESOS'].includes(normalized))
+        return 'ARS';
+    return normalized || 'ARS';
+};
 const normalizeConfidence = (value) => {
     if (typeof value === 'number' && Number.isFinite(value)) {
         return { overall: value };
@@ -40,7 +50,7 @@ const normalizeConfidence = (value) => {
 const sanitizeExcerpt = (raw) => String(raw || '')
     .replace(/\b\d{10,22}\b/g, '[REDACTED_LONG_NUMBER]')
     .slice(0, 300);
-const normalizeAIParserResult = (payload, fallbackText, telegramMeta) => {
+export const normalizeAIParserResult = (payload, fallbackText, telegramMeta) => {
     const source = isObject(payload?.result)
         ? payload.result
         : isObject(payload?.parse_result)
@@ -57,7 +67,7 @@ const normalizeAIParserResult = (payload, fallbackText, telegramMeta) => {
         source_app: pickFirstString(source.source_app, source.source, source.provider, source.payment_method, source.method),
         type: normalizeType(source.type ?? source.flow ?? source.direction ?? source.movement_type),
         amount: asNumber(source.amount ?? source.total ?? source.monto),
-        currency: String(pickFirstString(source.currency, source.moneda) || 'ARS').toUpperCase(),
+        currency: normalizeCurrency(pickFirstString(source.currency, source.moneda)),
         datetime_iso: pickFirstString(source.datetime_iso, source.date_time_iso, source.date_time, source.datetime, source.fecha_hora, source.date),
         counterparty: pickFirstString(source.counterparty, source.merchant, source.comercio, source.destination, source.destino, source.recipient),
         reference: pickFirstString(source.reference, source.ref, source.operation_id, source.comprobante),

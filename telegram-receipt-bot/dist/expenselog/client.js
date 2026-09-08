@@ -1,5 +1,5 @@
 import { config } from '../config.js';
-const buildExpenseLogWebURL = (pathname = '/app/table', webBaseURL = config.expenselogWebBaseUrl) => {
+export const buildExpenseLogWebURL = (pathname = '/app/table', webBaseURL = config.expenselogWebBaseUrl) => {
     const base = String(webBaseURL || '').replace(/\/+$/, '');
     const path = String(pathname || '').trim();
     if (/^https?:\/\//i.test(path)) {
@@ -120,7 +120,7 @@ export class ExpenseLogAdapter {
             category,
             amount: Math.abs(payload.amount),
             currency: String(payload.currency || 'ARS').toLowerCase(),
-            source: config.expenselogDefaultSource,
+            source: String(payload.provider || '').trim().toUpperCase(),
             flow: payload.type,
             tags: Array.isArray(payload.tags) ? payload.tags : [],
             date: payload.datetime_iso

@@ -65,7 +65,10 @@ func TestNormalizeBotExpenseSource(t *testing.T) {
 		provider string
 		want     string
 	}{
-		{provider: "", want: "CA"},
+		{provider: "", want: ""},
+		{provider: "UNKNOWN", want: ""},
+		{provider: "Desconocido", want: ""},
+		{provider: "No especificado", want: ""},
 		{provider: "MODO", want: "CA"},
 		{provider: "Galicia", want: "CA"},
 		{provider: "Transferencia", want: "CA"},

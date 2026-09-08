@@ -116,7 +116,7 @@
                 <div class="form-group method-group">
                     <label for="sourceSelect">Metodo</label>
                     <select id="sourceSelect">
-                        <option value="CA">Transferencia / Debito</option>
+                        <option value="CA">Transferencia</option>
                         <option value="EFECTIVO">Efectivo (solo registro)</option>
                         <option value="TARJETA">Tarjeta de credito</option>
                     </select>
@@ -927,7 +927,10 @@
             }
 
             const totalIncome = dayExpenses
-                .filter(exp => resolveFlow(exp) !== 'expense')
+                .filter(exp => resolveFlow(exp) === 'income')
+                .reduce((acc, exp) => acc + Math.abs(Number(exp.amount) || 0), 0);
+            const totalRefund = dayExpenses
+                .filter(exp => resolveFlow(exp) === 'refund')
                 .reduce((acc, exp) => acc + Math.abs(Number(exp.amount) || 0), 0);
             const totalExpense = dayExpenses
                 .filter(exp => resolveFlow(exp) === 'expense')
@@ -939,7 +942,7 @@
                 .map(exp => {
                     const flow = resolveFlow(exp);
                     const flowClass = flow === 'expense' ? 'negative' : 'positive';
-                    const sourceLabel = formatSourceLabel(exp.source || 'CA');
+                    const sourceLabel = formatSourceLabel(exp.source);
                     const amountText = formatCurrencyWithCurrency(exp.amount, exp.currency || currentCurrency);
                     return `
                         <li class="financial-calendar-movement ${flowClass}">
@@ -960,6 +963,7 @@
                     </div>
                     <div class="financial-calendar-details-totals">
                         <span class="income">Ingresos: ${formatCurrencyWithCurrency(totalIncome, currentCurrency)}</span>
+                        ${totalRefund > 0 ? `<span class="income">Reintegros: ${formatCurrencyWithCurrency(totalRefund, currentCurrency)}</span>` : ''}
                         <span class="expense">Gastos: ${formatCurrencyWithCurrency(-totalExpense, currentCurrency)}</span>
                     </div>
                 </div>
@@ -1026,7 +1030,7 @@
                 const key = getCalendarDateKey(date);
                 const dayExpenses = buckets.get(key) || [];
                 if (!firstMovementsDay && dayExpenses.length > 0) firstMovementsDay = key;
-                const incomeCount = dayExpenses.filter(exp => resolveFlow(exp) !== 'expense').length;
+                const incomeCount = dayExpenses.filter(exp => resolveFlow(exp) === 'income').length;
                 const expenseCount = dayExpenses.filter(exp => resolveFlow(exp) === 'expense').length;
                 const isSelected = key === selectedCalendarDayKey;
                 gridHTML += `
@@ -1172,7 +1176,7 @@
                         ${expenses.map((expense, index) => {
                             const amountFlowClass = resolveFlow(expense) === 'expense' ? 'is-expense' : 'is-income';
                             const sourceCode = normalizeSourceCode(expense.source || 'CA');
-                            const sourceLabel = formatSourceLabel(sourceCode);
+                            const sourceLabel = formatSourceLabel(expense.source);
                             const isTelegramExpense = isTelegramBotExpense(expense);
                             const isAppleWalletDraft = isAppleWalletDraftExpense(expense);
                             const shortcutSourceLabel = extractShortcutSourceLabel(expense);
@@ -1520,11 +1524,11 @@
             const movementType = movementTypeSelect ? movementTypeSelect.value : 'expense';
             const source = sourceSelect ? sourceSelect.value : 'CA';
             if (movementType === 'income') {
-                sourceImpactHint.textContent = 'Ingreso: suma Balance ahora. Medio disponible: Transferencia / Debito.';
+                sourceImpactHint.textContent = 'Ingreso: suma Balance ahora. Medio disponible: Transferencia.';
                 return;
             }
             if (movementType === 'refund') {
-                sourceImpactHint.textContent = 'Reintegro: suma Balance ahora. Medio disponible: Transferencia / Debito.';
+                sourceImpactHint.textContent = 'Reintegro: suma Balance ahora. Medio disponible: Transferencia.';
                 return;
             }
             if (source === 'TARJETA') {
@@ -1535,7 +1539,7 @@
                 sourceImpactHint.textContent = 'Gasto en efectivo: queda registrado y no descuenta Balance en el modo actual.';
                 return;
             }
-            sourceImpactHint.textContent = 'Gasto por Transferencia / Debito: descuenta Balance ahora.';
+            sourceImpactHint.textContent = 'Gasto por Transferencia: descuenta Balance ahora.';
         }
 
         function refreshSourceUX() {

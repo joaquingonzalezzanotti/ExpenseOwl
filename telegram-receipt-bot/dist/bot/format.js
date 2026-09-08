@@ -7,7 +7,9 @@ const normalizeForMethodMatch = (raw) => String(raw || '')
 const normalizePaymentMethod = (sourceApp) => {
     const raw = normalizeForMethodMatch(sourceApp);
     if (!raw)
-        return 'CA';
+        return '';
+    if (raw === 'UNKNOWN' || raw === 'NO ESPECIFICADO' || raw === 'DESCONOCIDO')
+        return '';
     if (raw === 'EFECTIVO' || raw.includes('CASH'))
         return 'EFECTIVO';
     if (raw.includes('DEBITO') || raw.includes('DEBIT') || raw.includes('TRANSFER') || raw.includes('BANK') || raw.includes('WALLET') || raw.includes('MODO'))
@@ -15,7 +17,7 @@ const normalizePaymentMethod = (sourceApp) => {
     if (raw === 'TARJETA' || raw.includes('CREDITO') || raw.includes('CREDIT') || raw.includes('MASTERCARD') || raw.includes('AMEX') || raw.includes('VISA')) {
         return 'TARJETA';
     }
-    return 'CA';
+    return '';
 };
 const formatPaymentMethodLabel = (sourceApp) => {
     const code = normalizePaymentMethod(sourceApp);
@@ -23,7 +25,9 @@ const formatPaymentMethodLabel = (sourceApp) => {
         return 'Tarjeta de credito';
     if (code === 'EFECTIVO')
         return 'Efectivo (solo registro)';
-    return 'Transferencia / Debito';
+    if (code === 'CA')
+        return 'Transferencia';
+    return 'Medio de pago no especificado';
 };
 const compactLine = (label, value) => {
     const clean = String(value || '').trim();
@@ -69,6 +73,8 @@ export const resolveSuggestedCategory = (r) => {
 const resolveTypeLabel = (r) => {
     if (r.type === 'income')
         return 'Ingreso';
+    if (r.type === 'refund')
+        return 'Reintegro';
     if (r.type === 'expense' && normalizePaymentMethod(r.source_app) === 'TARJETA')
         return 'Gasto (tarjeta)';
     if (r.type === 'expense')

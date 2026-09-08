@@ -66,3 +66,22 @@ test("reversion de conciliacion no infla ingresos del resumen", () => {
     assert.equal(scope.totalIncome, 100000);
     assert.equal(scope.totalExpenses, 0);
 });
+
+test("reintegro suma a caja disponible pero no infla KPI de ingresos", () => {
+    const rows = [
+        { amount: 100000, currency: "ars", source: "CA", flow: "income" },
+        { amount: -30000, currency: "ars", source: "CA", flow: "expense", category: "Viajes" },
+        { amount: 10000, currency: "ars", source: "CA", flow: "refund", category: "Viajes" },
+    ];
+
+    const scope = AnalyticsUI.buildScopedAnalytics(rows, {
+        includeCreditCard: false,
+        fallbackCurrency: "ars",
+        currency: "ars",
+    });
+
+    assert.equal(scope.totalIncome, 100000);
+    assert.equal(scope.totalRefund, 10000);
+    assert.equal(scope.totalInflow, 110000);
+    assert.equal(scope.totalExpenses, 30000);
+});

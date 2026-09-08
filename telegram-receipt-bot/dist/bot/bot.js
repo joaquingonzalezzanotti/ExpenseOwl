@@ -7,6 +7,7 @@ import { canUseAIParser, parseWithAIParser } from '../processing/ai_parser.js';
 import { logger } from '../observability/logger.js';
 import { draftSummary } from './format.js';
 import { parseDraftAction } from './callback_data.js';
+import { CONFIRMABLE_DRAFT_STATUSES, DRAFT_STATUS, DUPLICATE_CONFIRMABLE_DRAFT_STATUSES, EDITABLE_DRAFT_STATUSES, REJECTABLE_DRAFT_STATUSES, canResolveDraft, isTerminalDraftStatus } from './draft_state.js';
 import { dedupeKeyboard, fixMenuKeyboard, mainDecisionKeyboard, postConfirmKeyboard } from './keyboards.js';
 import { ExpenseLogAdapter, ExpenseLogAPIError } from '../expenselog/client.js';
 import { applyRules } from '../rules/engine.js';
@@ -34,7 +35,7 @@ const getPendingFixState = (userId) => {
 };
 const fieldPromptByKey = {
     source_app: { label: 'metodo de pago', hint: 'Escribi: "transferencia", "efectivo" o "tarjeta credito".' },
-    type: { label: 'tipo', hint: 'Escribi "gasto" o "ingreso".' },
+    type: { label: 'tipo', hint: 'Escribi "gasto", "ingreso" o "reintegro".' },
     amount: { label: 'monto', hint: 'Ejemplo: 1600 o 1600,50' },
     currency: { label: 'moneda', hint: 'Ejemplo: ARS' },
     datetime_iso: { label: 'fecha y hora', hint: 'Ejemplo: 24/02/2026 20:55' },
@@ -55,7 +56,19 @@ const parseTypeInput = (raw) => {
         return 'expense';
     if (['ingreso', 'income'].includes(normalized))
         return 'income';
+    if (['reintegro', 'refund', 'devolucion', 'devolución', 'cashback'].includes(normalized))
+        return 'refund';
     return undefined;
+};
+const normalizeCurrency = (raw) => {
+    const normalized = String(raw || '').trim().toUpperCase();
+    if (['USD', 'US$', 'U$S'].includes(normalized))
+        return 'USD';
+    if (['EUR', '€'].includes(normalized))
+        return 'EUR';
+    if (['ARS', '$', 'PESO', 'PESOS'].includes(normalized))
+        return 'ARS';
+    return 'ARS';
 };
 const normalizeForMethodMatch = (raw) => String(raw || '')
     .normalize('NFD')
@@ -65,7 +78,9 @@ const normalizeForMethodMatch = (raw) => String(raw || '')
 const normalizePaymentMethod = (raw) => {
     const normalized = normalizeForMethodMatch(raw);
     if (!normalized)
-        return 'CA';
+        return '';
+    if (normalized === 'UNKNOWN' || normalized === 'NO ESPECIFICADO' || normalized === 'DESCONOCIDO')
+        return '';
     if (normalized === 'EFECTIVO' || normalized.includes('CASH'))
         return 'EFECTIVO';
     if (normalized.includes('DEBITO') ||
@@ -86,7 +101,7 @@ const normalizePaymentMethod = (raw) => {
         normalized.includes('VISA')) {
         return 'TARJETA';
     }
-    return 'CA';
+    return '';
 };
 const parsePaymentMethodInput = (raw) => {
     const normalized = normalizeForMethodMatch(raw).toLowerCase();
@@ -200,13 +215,6 @@ const getOverallConfidence = (r) => {
     return Number.isFinite(value) ? value : undefined;
 };
 
-const AUTO_CONFIRM_CONFIDENCE_THRESHOLD = 0.7;
-const shouldAutoConfirmDraft = (parsed) => {
-    if (!mustHaveRequired(parsed))
-        return false;
-    const confidence = getOverallConfidence(parsed);
-    return typeof confidence === 'number' && confidence >= AUTO_CONFIRM_CONFIDENCE_THRESHOLD;
-};
 const shouldPreferAICandidate = (nativeParsed, aiParsed) => {
     const nativeRequired = mustHaveRequired(nativeParsed);
     const aiRequired = mustHaveRequired(aiParsed);
@@ -509,6 +517,7 @@ export const buildBot = () => {
                 nativeResult: null
             });
             parsed.source_app = normalizePaymentMethod(parsed.source_app);
+            parsed.currency = normalizeCurrency(parsed.currency);
             let rulesDb = [];
             try {
                 rulesDb = await prisma.userRule.findMany({
@@ -543,16 +552,18 @@ export const buildBot = () => {
                     fileId: `text:${ctx.message.message_id}`,
                     fileUniqueId: `text:${ctx.from.id}:${ctx.message.message_id}`,
                     fileType: 'text',
-                    status: mustHaveRequired(parsed) ? 'awaiting_confirm' : 'awaiting_fix',
+                    status: probableDuplicate ? DRAFT_STATUS.AWAITING_DUPLICATE_DECISION : (mustHaveRequired(parsed) ? DRAFT_STATUS.AWAITING_CONFIRM : DRAFT_STATUS.AWAITING_FIX),
                     parseResultJson: parsed,
                     dedupeKey: dedupeKey(parsed),
                     reference: parsed.reference
                 }
             });
             if (probableDuplicate) {
-                await ctx.reply('Detecte una posible carga duplicada. Quieres crearla igual?', dedupeKeyboard(draft.id));
+                await ctx.reply(`Detecte una posible carga duplicada. Quieres crearla igual?\n\n${draftSummary(parsed)}`, { parse_mode: 'Markdown', ...dedupeKeyboard(draft.id) });
             }
-            await ctx.reply(draftSummary(parsed), { parse_mode: 'Markdown', ...mainDecisionKeyboard(draft.id) });
+            else {
+                await ctx.reply(draftSummary(parsed), { parse_mode: 'Markdown', ...mainDecisionKeyboard(draft.id) });
+            }
             logger.info('draft_created_from_text', { id: draft.id, origin });
         }
         catch (error) {
@@ -722,7 +733,7 @@ export const buildBot = () => {
         else if (field === 'type') {
             const parsedType = parseTypeInput(value);
             if (!parsedType) {
-                await ctx.reply('No entendi el tipo. Escribe "gasto" o "ingreso".');
+                await ctx.reply('No entendi el tipo. Escribe "gasto", "ingreso" o "reintegro".');
                 return;
             }
             parsed.type = parsedType;
@@ -738,9 +749,14 @@ export const buildBot = () => {
         else if (field === 'motive')
             parsed.motive = value;
         parsed.source_app = normalizePaymentMethod(parsed.source_app);
+        parsed.currency = normalizeCurrency(parsed.currency);
+        if (!canResolveDraft(draft.status, EDITABLE_DRAFT_STATUSES)) {
+            pendingFix.delete(ctx.from.id);
+            return;
+        }
         await prisma.receiptDraft.update({
             where: { id: draft.id },
-            data: { parseResultJson: parsed, status: 'awaiting_confirm' }
+            data: { parseResultJson: parsed, status: DRAFT_STATUS.AWAITING_CONFIRM }
         });
         pendingFix.delete(ctx.from.id);
         draftResults.inc({ status: 'corrected' });
@@ -823,6 +839,7 @@ export const buildBot = () => {
             const parsed = processed?.result ?? processed;
             const fallbackInfo = processed?.fallback;
             parsed.source_app = normalizePaymentMethod(parsed.source_app);
+            parsed.currency = normalizeCurrency(parsed.currency);
             let rulesDb = [];
             try {
                 rulesDb = await prisma.userRule.findMany({
@@ -860,7 +877,7 @@ export const buildBot = () => {
                     fileId,
                     fileUniqueId,
                     fileType,
-                    status: mustHaveRequired(parsed) ? 'awaiting_confirm' : 'awaiting_fix',
+                    status: probableDuplicate ? DRAFT_STATUS.AWAITING_DUPLICATE_DECISION : (mustHaveRequired(parsed) ? DRAFT_STATUS.AWAITING_CONFIRM : DRAFT_STATUS.AWAITING_FIX),
                     parseResultJson: parsed,
                     dedupeKey: dedupeKey(parsed),
                     reference: parsed.reference
@@ -874,17 +891,12 @@ export const buildBot = () => {
                 phase: 'draft_created'
             });
             if (probableDuplicate) {
-                await ctx.reply('Detecte una posible carga duplicada. Quieres crearla igual?', dedupeKeyboard(draft.id));
+                await ctx.reply(`Detecte una posible carga duplicada. Quieres crearla igual?\n\n${draftSummary(parsed)}`, { parse_mode: 'Markdown', ...dedupeKeyboard(draft.id) });
             }
-            const autoConfirmed = shouldAutoConfirmDraft(parsed);
-            await ctx.reply(draftSummary(parsed), { parse_mode: 'Markdown', ...(autoConfirmed ? {} : mainDecisionKeyboard(draft.id)) });
-            if (autoConfirmed) {
-                const created = await createTransactionFromDraft(ctx, draft, 'auto');
-                if (created) {
-                    await ctx.reply('✅ Listo. La transaccion ya quedo registrada.', postConfirmKeyboard(created.url));
-                }
+            else {
+                await ctx.reply(draftSummary(parsed), { parse_mode: 'Markdown', ...mainDecisionKeyboard(draft.id) });
             }
-            logger.info('draft_created', { id: draft.id, autoConfirmed });
+            logger.info('draft_created', { id: draft.id, awaitingExplicitDecision: true, duplicate: Boolean(probableDuplicate) });
         }
         catch (error) {
             if (!createdDraft) {
@@ -942,6 +954,11 @@ export const buildBot = () => {
             const parsedAction = parseDraftAction(ctx.callbackQuery?.data, `fix_${action}`);
             if (!parsedAction)
                 return;
+            const draft = await findDraftByIDForUser(BigInt(ctx.from.id), parsedAction.draftId);
+            if (!draft || !canResolveDraft(draft.status, EDITABLE_DRAFT_STATUSES)) {
+                await ctx.reply('Este borrador ya fue resuelto y no se puede modificar.');
+                return;
+            }
             pendingFix.set(ctx.from.id, { field, draftId: parsedAction.draftId });
             const prompt = fieldPromptByKey[field];
             const hintLine = prompt?.hint ? `\n${prompt.hint}` : '';
@@ -967,6 +984,10 @@ export const buildBot = () => {
             await ctx.reply('No encontre un borrador reciente para mejorar.');
             return;
         }
+        if (!canResolveDraft(draft.status, EDITABLE_DRAFT_STATUSES)) {
+            await ctx.reply('Este borrador ya fue resuelto y no se puede reintentar.');
+            return;
+        }
         const parsed = toReceiptParseResult(draft.parseResultJson);
         const aiInputText = buildAITextFromDraft(parsed);
         if (!aiInputText) {
@@ -985,6 +1006,7 @@ export const buildBot = () => {
                 nativeResult: parsed
             });
             aiParsed.source_app = normalizePaymentMethod(aiParsed.source_app);
+            aiParsed.currency = normalizeCurrency(aiParsed.currency);
             let rulesDb = [];
             try {
                 rulesDb = await prisma.userRule.findMany({
@@ -1007,7 +1029,7 @@ export const buildBot = () => {
             await prisma.receiptDraft.update({
                 where: { id: draft.id },
                 data: {
-                    status: mustHaveRequired(finalParsed) ? 'awaiting_confirm' : 'awaiting_fix',
+                    status: mustHaveRequired(finalParsed) ? DRAFT_STATUS.AWAITING_CONFIRM : DRAFT_STATUS.AWAITING_FIX,
                     parseResultJson: finalParsed,
                     dedupeKey: dedupeKey(finalParsed),
                     reference: finalParsed.reference
@@ -1040,8 +1062,13 @@ export const buildBot = () => {
         const draft = await findDraftByIDForUser(BigInt(ctx.from.id), action.draftId);
         if (!draft)
             return;
-        await prisma.receiptDraft.update({ where: { id: draft.id }, data: { status: 'rejected' } });
-        draftResults.inc({ status: 'rejected' });
+        const updated = await prisma.receiptDraft.updateMany({
+            where: { id: draft.id, telegramUserId: BigInt(ctx.from.id), status: { in: REJECTABLE_DRAFT_STATUSES } },
+            data: { status: DRAFT_STATUS.REJECTED }
+        });
+        if (updated.count !== 1)
+            return;
+        draftResults.inc({ status: DRAFT_STATUS.REJECTED });
         await ctx.reply('Listo, descarte este borrador.');
     });
     bot.action(/^dedupe_cancel:[0-9a-f-]+$/i, async (ctx) => {
@@ -1054,23 +1081,38 @@ export const buildBot = () => {
         if (!action)
             return;
         const draft = await findDraftByIDForUser(BigInt(ctx.from.id), action.draftId);
-        if (draft) {
-            await prisma.receiptDraft.update({ where: { id: draft.id }, data: { status: 'rejected' } });
-            draftResults.inc({ status: 'rejected' });
-        }
+        if (!draft)
+            return;
+        const updated = await prisma.receiptDraft.updateMany({
+            where: { id: draft.id, telegramUserId: BigInt(ctx.from.id), status: { in: [DRAFT_STATUS.AWAITING_DUPLICATE_DECISION] } },
+            data: { status: DRAFT_STATUS.REJECTED }
+        });
+        if (updated.count !== 1)
+            return;
+        draftResults.inc({ status: DRAFT_STATUS.REJECTED });
         await ctx.reply('Perfecto, no cree la carga duplicada.');
     });
-    const createTransactionFromDraft = async (ctx, draft, source = 'manual') => {
+    const createTransactionFromDraft = async (ctx, draft, source = 'manual', allowedStatuses = CONFIRMABLE_DRAFT_STATUSES) => {
         const parsed = toReceiptParseResult(draft.parseResultJson);
+        if (isTerminalDraftStatus(draft.status) || !canResolveDraft(draft.status, allowedStatuses)) {
+            return undefined;
+        }
         if (!mustHaveRequired(parsed)) {
             const missing = getMissingRequiredLabels(parsed);
             await ctx.reply(`Faltan datos obligatorios: ${missing.join(', ')}.\nToca "Corregir datos" para completarlos.`);
             return undefined;
         }
+        const claimed = await prisma.receiptDraft.updateMany({
+            where: { id: draft.id, telegramUserId: BigInt(ctx.from.id), status: { in: allowedStatuses } },
+            data: { status: DRAFT_STATUS.CONFIRMING }
+        });
+        if (claimed.count !== 1)
+            return undefined;
         const stopCreateTx = stageLatency.startTimer({ stage: 'expenselog_create' });
         let created;
         const normalizedSource = normalizePaymentMethod(parsed.source_app);
         parsed.source_app = normalizedSource;
+        const currency = normalizeCurrency(parsed.currency);
         const transactionTags = buildBotTags(parsed.rule_output?.tags);
         try {
             if (multiUserLinkingEnabled) {
@@ -1078,7 +1120,7 @@ export const buildBot = () => {
                     telegram_user_id: ctx.from.id,
                     type: parsed.type,
                     amount: parsed.amount,
-                    currency: 'ARS',
+                    currency,
                     datetime_iso: parsed.datetime_iso,
                     counterparty: parsed.counterparty,
                     reference: parsed.reference,
@@ -1093,7 +1135,7 @@ export const buildBot = () => {
                 created = await expenselogClient.createTransaction({
                     type: parsed.type,
                     amount: parsed.amount,
-                    currency: 'ARS',
+                    currency,
                     datetime_iso: parsed.datetime_iso,
                     counterparty: parsed.counterparty,
                     reference: parsed.reference,
@@ -1109,18 +1151,22 @@ export const buildBot = () => {
             if (error instanceof ExpenseLogAPIError) {
                 if (error.code === 'not_linked') {
                     linkStatusCache.set(ctx.from.id, { expiresAt: Date.now() + LINK_STATUS_CACHE_TTL_MS, value: { ok: false, reason: 'not_linked' } });
+                    await prisma.receiptDraft.update({ where: { id: draft.id }, data: { status: DRAFT_STATUS.FAILED } });
                     await ctx.reply('Tu cuenta ya no esta vinculada. Genera un nuevo codigo en ExpenseLog y usa /vincular TU-CODIGO.');
                     return undefined;
                 }
                 if (error.code === 'premium_required') {
                     linkStatusCache.set(ctx.from.id, { expiresAt: Date.now() + LINK_STATUS_CACHE_TTL_MS, value: { ok: false, reason: 'premium_required' } });
+                    await prisma.receiptDraft.update({ where: { id: draft.id }, data: { status: DRAFT_STATUS.FAILED } });
                     await ctx.reply('Tu cuenta necesita Premium activo para confirmar comprobantes.');
                     return undefined;
                 }
+                await prisma.receiptDraft.update({ where: { id: draft.id }, data: { status: DRAFT_STATUS.FAILED } });
                 await ctx.reply(error.message || 'No pude crear la transaccion en ExpenseLog.');
                 return undefined;
             }
             logger.error('expenselog_create_failed', { error, source });
+            await prisma.receiptDraft.update({ where: { id: draft.id }, data: { status: DRAFT_STATUS.FAILED } });
             await ctx.reply('No pude crear la transaccion en ExpenseLog.');
             return undefined;
         }
@@ -1130,11 +1176,11 @@ export const buildBot = () => {
         await prisma.receiptDraft.update({
             where: { id: draft.id },
             data: {
-                status: 'confirmed',
+                status: DRAFT_STATUS.CONFIRMED,
                 expenselogTransactionId: created.transaction_id
             }
         });
-        draftResults.inc({ status: 'confirmed' });
+        draftResults.inc({ status: DRAFT_STATUS.CONFIRMED });
         return created;
     };
     const confirmHandler = async (ctx, callbackAction) => {
@@ -1149,7 +1195,8 @@ export const buildBot = () => {
         const draft = await findDraftByIDForUser(BigInt(ctx.from.id), action.draftId);
         if (!draft)
             return;
-        const created = await createTransactionFromDraft(ctx, draft, 'manual');
+        const allowedStatuses = callbackAction === 'dedupe_create_anyway' ? DUPLICATE_CONFIRMABLE_DRAFT_STATUSES : CONFIRMABLE_DRAFT_STATUSES;
+        const created = await createTransactionFromDraft(ctx, draft, callbackAction === 'dedupe_create_anyway' ? 'dedupe_override' : 'manual', allowedStatuses);
         if (!created)
             return;
         await ctx.editMessageReplyMarkup(postConfirmKeyboard(created.url).reply_markup);

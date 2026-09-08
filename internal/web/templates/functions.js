@@ -25,8 +25,9 @@ function normalizeSourceCode(source) {
 }
 
 function formatSourceLabel(source) {
+    if (String(source || '').trim() === '') return 'Medio no especificado';
     const code = normalizeSourceCode(source);
-    if (code === 'CA') return 'Transferencia / Debito';
+    if (code === 'CA') return 'Transferencia';
     if (code === 'TARJETA') return 'Tarjeta de credito';
     if (code === 'EFECTIVO') return 'Efectivo (solo registro)';
     return code || '-';
