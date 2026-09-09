@@ -1098,6 +1098,12 @@ html[data-theme='light'] #nextMonth {
     color: var(--text-primary);
 }
 
+.expense-counterparty-text {
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+    line-height: 1.2;
+}
+
 .expense-meta-mobile {
     display: none;
     margin-top: 0.25rem;

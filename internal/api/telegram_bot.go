@@ -244,21 +244,17 @@ func uniqueTags(tags []string) []string {
 }
 
 func buildBotExpenseName(counterparty, motive, reference string) string {
-	base := strings.TrimSpace(counterparty)
-	if base == "" {
-		base = "Movimiento Telegram"
-	}
-	motive = normalizeBotExpenseMotive(motive)
-	reference = normalizeBotExpenseReference(reference)
+	base := storage.SanitizeString(strings.TrimSpace(counterparty))
+	semanticMotive := normalizeBotExpenseMotive(motive)
 	switch {
-	case motive != "" && reference != "":
-		return fmt.Sprintf("%s - %s (%s)", base, motive, reference)
-	case motive != "":
-		return fmt.Sprintf("%s - %s", base, motive)
-	case reference != "":
-		return fmt.Sprintf("%s (%s)", base, reference)
-	default:
+	case semanticMotive != "" && base != "":
+		return fmt.Sprintf("%s - %s", semanticMotive, base)
+	case semanticMotive != "":
+		return semanticMotive
+	case base != "":
 		return base
+	default:
+		return "Movimiento Telegram"
 	}
 }
 

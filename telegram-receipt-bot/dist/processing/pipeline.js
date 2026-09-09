@@ -9,6 +9,7 @@ import { parseGenericReceipt } from '../parsing/generic.js';
 import { safeDeleteMany } from './file.js';
 import { stageLatency } from '../observability/metrics.js';
 import { canUseAIParser, parseWithAIParser } from './ai_parser.js';
+import { mergeExplicitUserTextIntoParsed, normalizeParsedTransaction } from '../bot/intake.js';
 
 const hasRequiredFields = (parsed) => {
     if (!parsed || typeof parsed !== 'object')
@@ -81,6 +82,7 @@ const parseWithNativeParser = (text, input) => {
 
 export const processReceipt = async (input) => {
     let text = '';
+    const explicitUserText = String(input.userText || input.caption || '').trim();
     const renderedImagePaths = [];
     const stopPipeline = stageLatency.startTimer({ stage: 'pipeline_total' });
     try {
@@ -101,7 +103,7 @@ export const processReceipt = async (input) => {
         logger.info('receipt_text_processed', { excerpt: logger.sanitizeText(text) });
         const stopParse = stageLatency.startTimer({ stage: 'parse' });
         try {
-            const nativeParsed = parseWithNativeParser(text, input);
+            const nativeParsed = mergeExplicitUserTextIntoParsed(parseWithNativeParser(text, input), explicitUserText);
             const fallbackDecision = shouldTriggerAIFallback(nativeParsed);
             if (!fallbackDecision.tryFallback) {
                 return {
@@ -120,12 +122,15 @@ export const processReceipt = async (input) => {
             }
 
             try {
-                const aiParsed = await parseWithAIParser({
-                    text,
+                const aiInputText = explicitUserText
+                    ? `${text}\n\nTexto escrito por usuario:\n${explicitUserText}`
+                    : text;
+                const aiParsed = mergeExplicitUserTextIntoParsed(await parseWithAIParser({
+                    text: aiInputText,
                     fileType: input.fileType,
                     telegramMeta: input.telegramMeta,
                     nativeResult: nativeParsed
-                });
+                }), explicitUserText);
                 if (shouldPreferAIResult(nativeParsed, aiParsed)) {
                     return {
                         result: aiParsed,
@@ -133,7 +138,7 @@ export const processReceipt = async (input) => {
                     };
                 }
                 return {
-                    result: nativeParsed,
+                    result: normalizeParsedTransaction(nativeParsed),
                     fallback: { attempted: true, used: false, reason: `${fallbackDecision.reason}_native_kept` }
                 };
             }

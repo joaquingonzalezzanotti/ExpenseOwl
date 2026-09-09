@@ -30,6 +30,24 @@ export class ExpenseLogAPIError extends Error {
         this.code = code;
     }
 }
+const isTechnicalBankMemo = (raw) => {
+    const normalized = String(raw || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[.\-_]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toUpperCase();
+    return ['VAR', 'N A', 'NA', 'N/A', 'SIN MOTIVO', 'SIN CONCEPTO', 'S E U O', 'SEUO'].includes(normalized);
+};
+const buildVisibleTransactionName = (counterparty, motive) => {
+    const cleanCounterparty = String(counterparty || '').replace(/\s+/g, ' ').trim();
+    const cleanMotive = String(motive || '').replace(/\s+/g, ' ').trim();
+    if (cleanMotive && !isTechnicalBankMemo(cleanMotive)) {
+        return cleanCounterparty ? `${cleanMotive} - ${cleanCounterparty}` : cleanMotive;
+    }
+    return cleanCounterparty || 'Movimiento Telegram';
+};
 export class ExpenseLogAdapter {
     async createTransaction(payload) {
         if (config.expenselogAdapterMode === 'transactions_api') {
@@ -108,10 +126,7 @@ export class ExpenseLogAdapter {
         return `${base}${path}`;
     }
     buildExpenseAPIPayload(payload) {
-        const directionLabel = payload.type === 'income' ? 'de' : 'a';
-        const fallbackName = `Transferencia ${directionLabel} ${payload.counterparty}`.trim();
-        const motive = String(payload.motive || '').trim();
-        const name = motive ? `${fallbackName} - ${motive}` : fallbackName;
+        const name = buildVisibleTransactionName(payload.counterparty, payload.motive);
         const category = payload.category || (payload.type === 'income'
             ? config.expenselogDefaultIncomeCategory
             : config.expenselogDefaultExpenseCategory);

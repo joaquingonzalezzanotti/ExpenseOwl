@@ -3,7 +3,7 @@ import { buildDraftAction } from './callback_data.js';
 const isSafeTelegramURL = (value) => /^https?:\/\//i.test(String(value || '').trim());
 export const mainDecisionKeyboard = (draftId) => Markup.inlineKeyboard([
     [Markup.button.callback('Confirmar', buildDraftAction('confirm', draftId))],
-    [Markup.button.callback('Corregir datos', buildDraftAction('fix_menu', draftId))],
+    [Markup.button.callback('Corregir', buildDraftAction('fix_menu', draftId))],
     [Markup.button.callback('Descartar', buildDraftAction('reject', draftId))]
 ]);
 export const postConfirmKeyboard = (transactionUrl) => {

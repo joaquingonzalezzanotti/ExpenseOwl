@@ -25,4 +25,19 @@ test('buildExpenseAPIPayload preserves explicit currency', () => {
     assert.equal(payload.amount, 10);
     assert.equal(payload.currency, 'usd');
     assert.equal(payload.source, '');
+    assert.equal(payload.name, 'para el trabajo - ChatGPT plus');
+});
+
+test('buildExpenseAPIPayload falls back to counterparty for technical motive', () => {
+    const adapter = new ExpenseLogAdapter();
+    const payload = adapter.buildExpenseAPIPayload({
+        type: 'expense',
+        amount: 8400,
+        currency: 'ARS',
+        counterparty: 'Juan Jose Palacio',
+        motive: 'VAR',
+        provider: 'CA'
+    });
+
+    assert.equal(payload.name, 'Juan Jose Palacio');
 });

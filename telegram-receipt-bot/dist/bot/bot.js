@@ -13,6 +13,7 @@ import { ExpenseLogAdapter, ExpenseLogAPIError } from '../expenselog/client.js';
 import { applyRules } from '../rules/engine.js';
 import { draftResults, parseResults, receiptsReceived, stageLatency } from '../observability/metrics.js';
 import { AUTO_TEXT_RECEIPT_GRACE_MS, AUTO_TEXT_RECEIPT_SUPPRESSION_MS, getRecentReceiptActivity, markRecentReceiptActivity, shouldSuppressAutoTextFromRecentReceipt } from './text_routing.js';
+import { buildDraftCorrectionUpdate, mergeExplicitUserTextIntoParsed, normalizeCurrency, normalizeParsedTransaction, normalizePaymentMethod } from './intake.js';
 import { writeFile } from 'node:fs/promises';
 const expenselogClient = new ExpenseLogAdapter();
 const pendingFix = new Map();
@@ -58,64 +59,6 @@ const parseTypeInput = (raw) => {
         return 'income';
     if (['reintegro', 'refund', 'devolucion', 'devolución', 'cashback'].includes(normalized))
         return 'refund';
-    return undefined;
-};
-const normalizeCurrency = (raw) => {
-    const normalized = String(raw || '').trim().toUpperCase();
-    if (['USD', 'US$', 'U$S'].includes(normalized))
-        return 'USD';
-    if (['EUR', '€'].includes(normalized))
-        return 'EUR';
-    if (['ARS', '$', 'PESO', 'PESOS'].includes(normalized))
-        return 'ARS';
-    return 'ARS';
-};
-const normalizeForMethodMatch = (raw) => String(raw || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .trim()
-    .toUpperCase();
-const normalizePaymentMethod = (raw) => {
-    const normalized = normalizeForMethodMatch(raw);
-    if (!normalized)
-        return '';
-    if (normalized === 'UNKNOWN' || normalized === 'NO ESPECIFICADO' || normalized === 'DESCONOCIDO')
-        return '';
-    if (normalized === 'EFECTIVO' || normalized.includes('CASH'))
-        return 'EFECTIVO';
-    if (normalized.includes('DEBITO') ||
-        normalized.includes('DEBIT') ||
-        normalized.includes('TRANSFER') ||
-        normalized.includes('BANK') ||
-        normalized.includes('BANCO') ||
-        normalized.includes('WALLET') ||
-        normalized.includes('MODO') ||
-        normalized.includes('GALICIA')) {
-        return 'CA';
-    }
-    if (normalized === 'TARJETA' ||
-        normalized.includes('CREDITO') ||
-        normalized.includes('CREDIT') ||
-        normalized.includes('MASTERCARD') ||
-        normalized.includes('AMEX') ||
-        normalized.includes('VISA')) {
-        return 'TARJETA';
-    }
-    return '';
-};
-const parsePaymentMethodInput = (raw) => {
-    const normalized = normalizeForMethodMatch(raw).toLowerCase();
-    if (!normalized)
-        return undefined;
-    if (normalized.includes('efectivo') || normalized.includes('cash')) {
-        return 'EFECTIVO';
-    }
-    if (normalized.includes('transfer') || normalized.includes('debito') || normalized.includes('debit') || normalized.includes('banco') || normalized.includes('bank') || normalized.includes('modo')) {
-        return 'CA';
-    }
-    if (normalized.includes('tarjeta') || normalized.includes('credito') || normalized.includes('credit') || normalized.includes('visa') || normalized.includes('master') || normalized.includes('amex')) {
-        return 'TARJETA';
-    }
     return undefined;
 };
 const getMissingRequiredLabels = (r) => {
@@ -463,6 +406,9 @@ const buildBotTags = (ruleTags) => {
         : [];
     return Array.from(new Set([...safeRuleTags, 'telegram_bot']));
 };
+const decisionKeyboardForDraftStatus = (status, draftId) => (status === DRAFT_STATUS.AWAITING_DUPLICATE_DECISION
+    ? dedupeKeyboard(draftId)
+    : mainDecisionKeyboard(draftId));
 export const buildBot = () => {
     const bot = new Telegraf(config.telegramBotToken);
     const consumeLinkCodeForCtx = async (ctx, codeInput) => {
@@ -510,14 +456,13 @@ export const buildBot = () => {
             file_unique_id: `text:${ctx.from.id}:${ctx.message.message_id}`
         };
         try {
-            const parsed = await parseWithAIParser({
+            let parsed = await parseWithAIParser({
                 text: rawText,
                 fileType: 'text',
                 telegramMeta,
                 nativeResult: null
             });
-            parsed.source_app = normalizePaymentMethod(parsed.source_app);
-            parsed.currency = normalizeCurrency(parsed.currency);
+            parsed = normalizeParsedTransaction(parsed);
             let rulesDb = [];
             try {
                 rulesDb = await prisma.userRule.findMany({
@@ -576,6 +521,31 @@ export const buildBot = () => {
             }
             await ctx.reply('No pude procesar ese texto con parser AI. Prueba reformularlo o envia una imagen/PDF.');
         }
+    };
+    const mergePlainTextIntoRecentMediaDraftForCtx = async (ctx, rawText) => {
+        const telegramUserId = BigInt(ctx.from.id);
+        const chatId = BigInt(ctx.chat.id);
+        await sleep(AUTO_TEXT_RECEIPT_GRACE_MS);
+        const recentMediaDraft = await findRecentMediaDraftForConversation(telegramUserId, chatId);
+        if (!recentMediaDraft || !canResolveDraft(recentMediaDraft.status, EDITABLE_DRAFT_STATUSES)) {
+            return false;
+        }
+        const parsed = mergeExplicitUserTextIntoParsed(toReceiptParseResult(recentMediaDraft.parseResultJson), rawText);
+        const nextStatus = recentMediaDraft.status === DRAFT_STATUS.AWAITING_DUPLICATE_DECISION
+            ? DRAFT_STATUS.AWAITING_DUPLICATE_DECISION
+            : (mustHaveRequired(parsed) ? DRAFT_STATUS.AWAITING_CONFIRM : DRAFT_STATUS.AWAITING_FIX);
+        await prisma.receiptDraft.update({
+            where: { id: recentMediaDraft.id },
+            data: {
+                parseResultJson: parsed,
+                status: nextStatus,
+                dedupeKey: dedupeKey(parsed),
+                reference: parsed.reference
+            }
+        });
+        draftResults.inc({ status: 'caption_merged' });
+        await ctx.reply(draftSummary(parsed), { parse_mode: 'Markdown', ...decisionKeyboardForDraftStatus(nextStatus, recentMediaDraft.id) });
+        return true;
     };
     const shouldSuppressAutoTextForCtx = async (ctx) => {
         const telegramUserId = BigInt(ctx.from.id);
@@ -702,6 +672,9 @@ export const buildBot = () => {
             return;
         const pending = getPendingFixState(ctx.from.id);
         if (!pending) {
+            if (await mergePlainTextIntoRecentMediaDraftForCtx(ctx, rawText)) {
+                return;
+            }
             if (!config.aiParserTextEnabled) {
                 return;
             }
@@ -723,44 +696,34 @@ export const buildBot = () => {
         if (!draft)
             return;
         const parsed = toReceiptParseResult(draft.parseResultJson);
-        const value = rawText;
-        if (field === 'amount')
-            parsed.amount = Number(value.replace(',', '.'));
-        else if (field === 'datetime_iso')
-            parsed.datetime_iso = value;
-        else if (field === 'counterparty')
-            parsed.counterparty = value;
-        else if (field === 'type') {
+        let value = rawText;
+        if (field === 'type') {
             const parsedType = parseTypeInput(value);
             if (!parsedType) {
                 await ctx.reply('No entendi el tipo. Escribe "gasto", "ingreso" o "reintegro".');
                 return;
             }
-            parsed.type = parsedType;
+            value = parsedType;
         }
-        else if (field === 'source_app') {
-            const parsedMethod = parsePaymentMethodInput(value);
-            if (!parsedMethod) {
-                await ctx.reply('No entendi el metodo. Escribe: "transferencia", "efectivo" o "tarjeta credito".');
-                return;
-            }
-            parsed.source_app = parsedMethod;
+        const nextStatus = draft.status === DRAFT_STATUS.AWAITING_DUPLICATE_DECISION
+            ? DRAFT_STATUS.AWAITING_DUPLICATE_DECISION
+            : DRAFT_STATUS.AWAITING_CONFIRM;
+        const correction = buildDraftCorrectionUpdate(parsed, field, value, nextStatus);
+        if (correction.error === 'invalid_payment_method') {
+            await ctx.reply('No entendi el metodo. Escribe: "transferencia", "efectivo" o "tarjeta credito".');
+            return;
         }
-        else if (field === 'motive')
-            parsed.motive = value;
-        parsed.source_app = normalizePaymentMethod(parsed.source_app);
-        parsed.currency = normalizeCurrency(parsed.currency);
         if (!canResolveDraft(draft.status, EDITABLE_DRAFT_STATUSES)) {
             pendingFix.delete(ctx.from.id);
             return;
         }
         await prisma.receiptDraft.update({
             where: { id: draft.id },
-            data: { parseResultJson: parsed, status: DRAFT_STATUS.AWAITING_CONFIRM }
+            data: correction.data
         });
         pendingFix.delete(ctx.from.id);
         draftResults.inc({ status: 'corrected' });
-        await ctx.reply(draftSummary(parsed), { parse_mode: 'Markdown', ...mainDecisionKeyboard(draft.id) });
+        await ctx.reply(draftSummary(correction.parsed), { parse_mode: 'Markdown', ...decisionKeyboardForDraftStatus(nextStatus, draft.id) });
     });
     bot.on(['photo', 'document'], async (ctx) => {
         if (!(await ensurePrivateAllowed(ctx)))
@@ -834,7 +797,8 @@ export const buildBot = () => {
             const processed = await processReceipt({
                 filePath: tempPath,
                 fileType,
-                telegramMeta
+                telegramMeta,
+                userText: message?.caption
             });
             const parsed = processed?.result ?? processed;
             const fallbackInfo = processed?.fallback;

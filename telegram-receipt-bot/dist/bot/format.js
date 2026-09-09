@@ -1,24 +1,5 @@
 import { config } from '../config.js';
-const normalizeForMethodMatch = (raw) => String(raw || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .trim()
-    .toUpperCase();
-const normalizePaymentMethod = (sourceApp) => {
-    const raw = normalizeForMethodMatch(sourceApp);
-    if (!raw)
-        return '';
-    if (raw === 'UNKNOWN' || raw === 'NO ESPECIFICADO' || raw === 'DESCONOCIDO')
-        return '';
-    if (raw === 'EFECTIVO' || raw.includes('CASH'))
-        return 'EFECTIVO';
-    if (raw.includes('DEBITO') || raw.includes('DEBIT') || raw.includes('TRANSFER') || raw.includes('BANK') || raw.includes('WALLET') || raw.includes('MODO'))
-        return 'CA';
-    if (raw === 'TARJETA' || raw.includes('CREDITO') || raw.includes('CREDIT') || raw.includes('MASTERCARD') || raw.includes('AMEX') || raw.includes('VISA')) {
-        return 'TARJETA';
-    }
-    return '';
-};
+import { normalizePaymentMethod, resolveVisibleTitle } from './intake.js';
 const formatPaymentMethodLabel = (sourceApp) => {
     const code = normalizePaymentMethod(sourceApp);
     if (code === 'TARJETA')
@@ -28,12 +9,6 @@ const formatPaymentMethodLabel = (sourceApp) => {
     if (code === 'CA')
         return 'Transferencia';
     return 'Medio de pago no especificado';
-};
-const compactLine = (label, value) => {
-    const clean = String(value || '').trim();
-    if (!clean || clean === '-')
-        return '';
-    return `${label}: ${clean}`;
 };
 const normalizeMoney = (amount) => (typeof amount === 'number' && Number.isFinite(amount)
     ? amount.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
@@ -81,22 +56,21 @@ const resolveTypeLabel = (r) => {
         return 'Gasto';
     return 'Pendiente';
 };
-const looksLikeUUID = (value) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(value || '').trim());
-const shouldShowReference = (reference) => {
-    const clean = String(reference || '').trim();
-    if (!clean)
-        return false;
-    if (looksLikeUUID(clean))
-        return false;
-    return clean.length <= 24;
+const resolveHeaderLabel = (r) => `${resolveTypeLabel(r).replace(/\s*\(.+?\)\s*$/, '')} detectado`;
+const resolvePartyLine = (r) => [String(r.counterparty || '').trim(), formatPaymentMethodLabel(r.source_app)]
+    .filter(Boolean)
+    .join(' · ');
+export const draftSummary = (r) => {
+    const partyLine = resolvePartyLine(r);
+    const lines = [
+        `*${resolveHeaderLabel(r)}*`,
+        '',
+        `*${normalizeMoney(r.amount)} ${String(r.currency || 'ARS').trim().toUpperCase()}*`,
+        resolveVisibleTitle(r)
+    ];
+    if (partyLine) {
+        lines.push(partyLine);
+    }
+    lines.push(formatDateTimeLabel(r.datetime_iso));
+    return lines.join('\n');
 };
-export const draftSummary = (r) => [
-    '*Movimiento detectado*',
-    `${resolveTypeLabel(r)} • ${normalizeMoney(r.amount)} ${String(r.currency || 'ARS').trim().toUpperCase()}`,
-    formatDateTimeLabel(r.datetime_iso),
-    String(r.counterparty || '').trim() || '-',
-    formatPaymentMethodLabel(r.source_app),
-    compactLine('Motivo', r.motive),
-    compactLine('Categoria', resolveSuggestedCategory(r)),
-    shouldShowReference(r.reference) ? compactLine('Ref', r.reference) : ''
-].filter(Boolean).join('\n');

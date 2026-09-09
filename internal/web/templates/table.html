@@ -342,6 +342,7 @@
         </div>
     </div>
 
+    <script src="/app/expense_display.js"></script>
     <script src="/app/functions.js"></script>
     <script src="/app/onboarding_ui.js"></script>
     <script>
@@ -1180,11 +1181,15 @@
                             const isTelegramExpense = isTelegramBotExpense(expense);
                             const isAppleWalletDraft = isAppleWalletDraftExpense(expense);
                             const shortcutSourceLabel = extractShortcutSourceLabel(expense);
+                            const displayParts = (window.ExpenseLogExpenseDisplay && typeof window.ExpenseLogExpenseDisplay.resolveExpenseDisplayParts === 'function')
+                                ? window.ExpenseLogExpenseDisplay.resolveExpenseDisplayParts(expense)
+                                : { title: expense.name || '-', secondary: '' };
                             return `
                             <tr>
                                 <td>
                                     <div class="expense-name-cell">
-                                        <span class="expense-name-text">${highlightText(expense.name, searchQuery)}</span>
+                                        <span class="expense-name-text">${highlightText(displayParts.title, searchQuery)}</span>
+                                        ${displayParts.secondary ? `<span class="expense-counterparty-text">${highlightText(displayParts.secondary, searchQuery)}</span>` : ''}
                                         ${expense.recurringID ? '<span class="recurring-badge">Recurrente</span>' : ''}
                                         ${isTelegramExpense ? '<span class="recurring-badge">BotTelegram</span>' : ''}
                                         ${isAppleWalletDraft ? '<span class="recurring-badge">ApplePay</span>' : ''}

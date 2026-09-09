@@ -101,8 +101,15 @@ func TestBuildBotExpenseNameOmitsOpaqueReferenceAndGenericMotive(t *testing.T) {
 
 func TestBuildBotExpenseNameKeepsUsefulDetails(t *testing.T) {
 	got := buildBotExpenseName("Farmacia Central", "Ibuprofeno", "A12345")
-	if got != "Farmacia Central - Ibuprofeno (A12345)" {
+	if got != "Ibuprofeno - Farmacia Central" {
 		t.Fatalf("unexpected bot expense name: %q", got)
+	}
+}
+
+func TestBuildBotExpenseNameUsesCounterpartyFallback(t *testing.T) {
+	got := buildBotExpenseName("Juan Jose Palacio", "VAR", "A12345")
+	if got != "Juan Jose Palacio" {
+		t.Fatalf("expected counterparty fallback, got %q", got)
 	}
 }
 
